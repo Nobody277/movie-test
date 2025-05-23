@@ -2,99 +2,63 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Embed Player with HLS & Cast</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Movie Night Player</title>
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
-    :root { --bg: #f2f2f2; --fg: #333; --accent: #0066ff; --input-bg: #fff; --input-border: #ccc; --card-shadow: rgba(0,0,0,0.1); --cast-button-color: #333; }
-    [data-theme="dark"] { --bg: #121212; --fg: #e0e0e0; --accent: #3399ff; --input-bg: #1e1e1e; --input-border: #444; --card-shadow: rgba(0,0,0,0.5); --cast-button-color: #e0e0e0; }
-    @media (prefers-color-scheme: dark) {
-      :root { color-scheme: light dark; }
-      :root:not([data-theme]) { --bg: #121212; --fg: #e0e0e0; --accent: #3399ff; --input-bg: #1e1e1e; --input-border: #444; --card-shadow: rgba(0,0,0,0.5); --cast-button-color: #e0e0e0; }
-    }
-    body { margin: 0; padding: 2rem 1rem; font-family: 'Roboto', sans-serif; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; align-items: center; min-height: 100vh; gap: 1.5rem; }
-    #versionTag { position: fixed; top: 0.5rem; left: 0.5rem; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; z-index: 999; }
-    h1 { margin: 0; font-weight: 500; text-align: center; }
-    .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; align-items: center; }
-    input[type="text"] { padding: 0.6rem 1rem; font-size: 1rem; flex: 1 1 300px; max-width: 600px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--fg); }
-    button { padding: 0.6rem 1.2rem; font-size: 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; transition: filter 0.2s; }
-    button:hover { filter: brightness(1.1); }
-    .theme-toggle { position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--fg); }
-    #videoContainer { width: 90vw; max-width: 1200px; box-shadow: 0 4px 16px var(--card-shadow); border-radius: 8px; overflow: hidden; }
-    #videoPlayer { width: 100%; height: auto; display: block; background: #000; }
-    .cast-info { font-size: 0.9em; color: var(--fg); margin-top: 0.5rem; text-align: center; }
+    :root { --bg-gradient: linear-gradient(135deg,#000,#2e003e); --fg: #e0e0e0; --accent: #9b00ff; --input-bg: #1a1a1a; --input-border: #3e003f; --card-shadow: rgba(0,0,0,0.7); }
+    body { margin: 0; padding: 0; font-family: 'Roboto',sans-serif; background: var(--bg-gradient); color: var(--fg); display: flex; height: 100vh; overflow: hidden; }
+    #mainContent { display: flex; flex: 1; }
+    #videoSection { flex: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; }
+    #videoContainer { width: 100%; max-width: 900px; box-shadow: 0 4px 16px var(--card-shadow); border-radius: 8px; overflow: hidden; }
+    #videoPlayer { width: 100%; height: auto; background: #000; }
+    #controls { margin-top: 1rem; display: flex; gap: .5rem; }
+    #videoURL { flex: 1; max-width: 600px; padding: .6rem 1rem; font-size: 1rem; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--fg); }
+    #loadBtn { padding: .6rem 1.2rem; font-size: 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; transition: transform .2s; }
+    #loadBtn:hover { transform: scale(1.05); }
+    #chatSidebar { flex: 1; max-width: 350px; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); display: flex; flex-direction: column; animation: slideIn 1s ease forwards; }
+    #chatHeader { padding: 1rem; font-size: 1.2rem; border-bottom: 1px solid var(--input-border); }
+    #chatMessages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+    .chatMessage { padding: .5rem .75rem; background: rgba(255,255,255,0.1); border-radius: 6px; max-width: 80%; animation: fadeIn 0.5s ease; }
+    #chatInputContainer { display: flex; padding: .75rem; border-top: 1px solid var(--input-border); }
+    #chatInput { flex: 1; padding: .5rem .75rem; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--fg); }
+    #sendBtn { margin-left: .5rem; padding: .5rem 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; transition: transform .2s; }
+    #sendBtn:hover { transform: scale(1.1); }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
-  <div id="versionTag">v1.1</div>
-  <button class="theme-toggle" id="themeToggle">🌓</button>
-  <h1>Video Player with HLS & Cast</h1>
-  <div class="controls">
-    <input id="videoURL" type="text" placeholder="Paste .mp4 or .m3u8 URL here…" aria-label="Video URL">
-    <button id="loadBtn">Load Video</button>
-    <button id="remoteBtn">📺 Cast/Play on TV</button>
-  </div>
-  <div id="castInfo" class="cast-info"></div>
-  <div id="videoContainer">
-    <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline x-webkit-airplay="allow"></video>
+  <div id="mainContent">
+    <section id="videoSection">
+      <div id="videoContainer">
+        <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline></video>
+      </div>
+      <div id="controls">
+        <input id="videoURL" type="text" placeholder="Paste Video Url..." aria-label="Video URL">
+        <button id="loadBtn">Load Video</button>
+      </div>
+    </section>
+    <aside id="chatSidebar">
+      <div id="chatHeader">Chat</div>
+      <div id="chatMessages"></div>
+      <div id="chatInputContainer">
+        <input id="chatInput" type="text" placeholder="Type a message…">
+        <button id="sendBtn">Send</button>
+      </div>
+    </aside>
   </div>
   <script>
-    const loadBtn = document.getElementById('loadBtn');
-    const remoteBtn = document.getElementById('remoteBtn');
-    const videoURLInput = document.getElementById('videoURL');
-    const videoPlayer = document.getElementById('videoPlayer');
-    const themeToggle = document.getElementById('themeToggle');
-    const root = document.documentElement;
-    const castInfoDiv = document.getElementById('castInfo');
-    let hlsInstance = null;
-    let currentVideoUrl = null;
-
-    themeToggle.addEventListener('click', () => {
-      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
+    const loadBtn=document.getElementById('loadBtn'),videoURLInput=document.getElementById('videoURL'),videoPlayer=document.getElementById('videoPlayer');
+    let hls=null;
+    loadBtn.addEventListener('click',()=>{const url=videoURLInput.value.trim();if(!url)return;if(hls){hls.destroy();hls=null;}videoPlayer.src='';videoPlayer.load();if(url.includes('.m3u8')&&Hls.isSupported()){hls=new Hls();hls.loadSource(url);hls.attachMedia(videoPlayer);}else{videoPlayer.src=url;}videoPlayer.play().catch(()=>{});
     });
-    if (localStorage.getItem('theme')) {
-      root.setAttribute('data-theme', localStorage.getItem('theme'));
-    }
-
-    loadBtn.addEventListener('click', () => {
-      const url = videoURLInput.value.trim();
-      if (!url) return;
-      currentVideoUrl = url;
-      castInfoDiv.textContent = 'Playing locally';
-      videoPlayer.style.display = 'block';
-      if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-      videoPlayer.src = '';
-      videoPlayer.load();
-      if (url.includes('.m3u8') && Hls.isSupported()) {
-        hlsInstance = new Hls();
-        hlsInstance.loadSource(url);
-        hlsInstance.attachMedia(videoPlayer);
-        hlsInstance.on(Hls.Events.ERROR, (event, data) => castInfoDiv.textContent = 'HLS error: ' + data.details);
-      } else {
-        videoPlayer.src = url;
-      }
-      videoPlayer.play().catch(() => {});
-    });
-
-    remoteBtn.addEventListener('click', () => {
-      if (videoPlayer.remote && videoPlayer.remote.prompt) {
-        videoPlayer.remote.prompt().catch(err => castInfoDiv.textContent = err);
-      } else if (videoPlayer.webkitShowPlaybackTargetPicker) {
-        videoPlayer.webkitShowPlaybackTargetPicker();
-      } else {
-        castInfoDiv.textContent = 'Casting/AirPlay not supported';
-      }
-    });
-
-    videoPlayer.addEventListener('error', () => {
-      const e = videoPlayer.error;
-      const msgs = ['Unknown','Network','Decode','Not Supported','Src Missing'];
-      castInfoDiv.textContent = 'Playback Error: ' + (msgs[e?.code]||'Unknown');
-    });
+    const chatInput=document.getElementById('chatInput'),sendBtn=document.getElementById('sendBtn'),chatMessages=document.getElementById('chatMessages');
+    function appendMessage(text){const el=document.createElement('div');el.className='chatMessage';el.textContent=text;chatMessages.append(el);chatMessages.scrollTop=chatMessages.scrollHeight;}
+    sendBtn.addEventListener('click',()=>{const txt=chatInput.value.trim();if(!txt)return;appendMessage(txt);chatInput.value='';});
+    chatInput.addEventListener('keypress',e=>{if(e.key==='Enter'){sendBtn.click();e.preventDefault();}});
   </script>
 </body>
 </html>
