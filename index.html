@@ -10,121 +10,28 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
-    :root {
-      --bg: #f2f2f2;
-      --fg: #333;
-      --accent: #0066ff;
-      --input-bg: #fff;
-      --input-border: #ccc;
-      --card-shadow: rgba(0,0,0,0.1);
-      --cast-button-color: #333;
-    }
-    [data-theme="dark"] {
-      --bg: #121212;
-      --fg: #e0e0e0;
-      --accent: #3399ff;
-      --input-bg: #1e1e1e;
-      --input-border: #444;
-      --card-shadow: rgba(0,0,0,0.5);
-      --cast-button-color: #e0e0e0;
-    }
+    :root { --bg: #f2f2f2; --fg: #333; --accent: #0066ff; --input-bg: #fff; --input-border: #ccc; --card-shadow: rgba(0,0,0,0.1); --cast-button-color: #333; }
+    [data-theme="dark"] { --bg: #121212; --fg: #e0e0e0; --accent: #3399ff; --input-bg: #1e1e1e; --input-border: #444; --card-shadow: rgba(0,0,0,0.5); --cast-button-color: #e0e0e0; }
     @media (prefers-color-scheme: dark) {
       :root { color-scheme: light dark; }
-      :root:not([data-theme]) {
-        --bg: #121212;
-        --fg: #e0e0e0;
-        --accent: #3399ff;
-        --input-bg: #1e1e1e;
-        --input-border: #444;
-        --card-shadow: rgba(0,0,0,0.5);
-        --cast-button-color: #e0e0e0;
-      }
+      :root:not([data-theme]) { --bg: #121212; --fg: #e0e0e0; --accent: #3399ff; --input-bg: #1e1e1e; --input-border: #444; --card-shadow: rgba(0,0,0,0.5); --cast-button-color: #e0e0e0; }
     }
-    body {
-      margin: 0;
-      padding: 2rem 1rem;
-      font-family: 'Roboto', sans-serif;
-      background: var(--bg);
-      color: var(--fg);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      gap: 1.5rem;
-    }
-    h1 {
-      margin: 0;
-      font-weight: 500;
-      text-align: center;
-    }
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: center;
-      align-items: center;
-    }
-    input[type="text"] {
-      padding: 0.6rem 1rem;
-      font-size: 1rem;
-      flex: 1 1 300px;
-      max-width: 600px;
-      border: 1px solid var(--input-border);
-      border-radius: 6px;
-      background: var(--input-bg);
-      color: var(--fg);
-    }
-    button {
-      padding: 0.6rem 1.2rem;
-      font-size: 1rem;
-      border: none;
-      border-radius: 6px;
-      background: var(--accent);
-      color: #fff;
-      cursor: pointer;
-      transition: filter 0.2s;
-    }
+    body { margin: 0; padding: 2rem 1rem; font-family: 'Roboto', sans-serif; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; align-items: center; min-height: 100vh; gap: 1.5rem; }
+    #versionTag { position: fixed; top: 0.5rem; left: 0.5rem; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; z-index: 999; }
+    h1 { margin: 0; font-weight: 500; text-align: center; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; align-items: center; }
+    input[type="text"] { padding: 0.6rem 1rem; font-size: 1rem; flex: 1 1 300px; max-width: 600px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--fg); }
+    button { padding: 0.6rem 1.2rem; font-size: 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; transition: filter 0.2s; }
     button:hover { filter: brightness(1.1); }
-    .theme-toggle {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
-      background: transparent;
-      border: none;
-      font-size: 1.2rem;
-      cursor: pointer;
-      color: var(--fg);
-    }
-    #videoContainer {
-      width: 90vw;
-      max-width: 1200px;
-      box-shadow: 0 4px 16px var(--card-shadow);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    #videoPlayer {
-      width: 100%;
-      height: auto;
-      display: block;
-      background: #000;
-    }
-    google-cast-launcher {
-      width: 24px;
-      height: 24px;
-      cursor: pointer;
-      margin-left: 0.5rem;
-      color: var(--cast-button-color);
-      --cast-button-active-color: var(--accent);
-    }
-    .cast-info {
-      font-size: 0.9em;
-      color: var(--fg);
-      margin-top: 0.5rem;
-      text-align: center;
-    }
+    .theme-toggle { position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--fg); }
+    #videoContainer { width: 90vw; max-width: 1200px; box-shadow: 0 4px 16px var(--card-shadow); border-radius: 8px; overflow: hidden; }
+    #videoPlayer { width: 100%; height: auto; display: block; background: #000; }
+    google-cast-launcher { width: 24px; height: 24px; cursor: pointer; margin-left: 0.5rem; color: var(--cast-button-color); --cast-button-active-color: var(--accent); }
+    .cast-info { font-size: 0.9em; color: var(--fg); margin-top: 0.5rem; text-align: center; }
   </style>
 </head>
 <body>
+  <div id="versionTag">v1.1</div>
   <button class="theme-toggle" id="themeToggle">🌓</button>
   <h1>Video Player with HLS & Cast</h1>
   <div class="controls">
@@ -143,100 +50,77 @@
     const loadBtn = document.getElementById('loadBtn');
     const videoURLInput = document.getElementById('videoURL');
     const videoPlayer = document.getElementById('videoPlayer');
-    const videoSource = document.getElementById('videoSource');
     const themeToggle = document.getElementById('themeToggle');
     const root = document.documentElement;
-    const castButton = document.getElementById('castButton');
     const castInfoDiv = document.getElementById('castInfo');
     let hlsInstance = null;
     let currentVideoUrl = null;
+
     themeToggle.addEventListener('click', () => {
       const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
     });
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) root.setAttribute('data-theme', savedTheme);
+    if (localStorage.getItem('theme')) {
+      root.setAttribute('data-theme', localStorage.getItem('theme'));
+    }
 
     window['__onGCastApiAvailable'] = function(isAvailable) {
-      castInfoDiv.textContent = isAvailable
-        ? 'Initializing Cast context...'  
-        : 'Cast API not available. Use Chrome with a Cast device on the same network.';
-      if (isAvailable) initializeCastApi();
+      castInfoDiv.textContent = isAvailable ? 'Initializing Cast context...' : 'Cast API unavailable';
+      if (isAvailable) initCast();
     };
-
-    function initializeCastApi() {
+    function initCast() {
       const ctx = cast.framework.CastContext.getInstance();
-      if (!ctx) return castInfoDiv.textContent = 'Error: CastContext unavailable';
-      ctx.setOptions({
-        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-      });
+      ctx.setOptions({ receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID, autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED });
       const player = new cast.framework.RemotePlayer();
       const controller = new cast.framework.RemotePlayerController(player);
-      controller.addEventListener(
-        cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
-        () => {
-          if (player.isConnected && currentVideoUrl) {
-            loadAndPlayMedia(currentVideoUrl);
-            videoPlayer.style.display = 'none';
-            castInfoDiv.textContent = 'Casting: ' + currentVideoUrl;
-          } else {
-            videoPlayer.style.display = 'block';
-            castInfoDiv.textContent = 'Cast disconnected or no device found';
-          }
+      controller.addEventListener(cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED, () => {
+        if (player.isConnected && currentVideoUrl) {
+          playCastMedia(currentVideoUrl);
+          videoPlayer.style.display = 'none';
+        } else {
+          videoPlayer.style.display = 'block';
         }
-      );
+      });
+    }
+    function playCastMedia(url) {
+      const session = cast.framework.CastContext.getInstance().getCurrentSession();
+      const mediaInfo = new chrome.cast.media.MediaInfo(url, url.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4');
+      session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo));
+      castInfoDiv.textContent = 'Casting: ' + url;
     }
 
     loadBtn.addEventListener('click', () => {
       const url = videoURLInput.value.trim();
-      if (!url) return alert('Please paste a valid URL.');
+      if (!url) return;
       currentVideoUrl = url;
-      loadAndPlayMedia(url);
+      playLocal(url);
     });
 
-    function loadAndPlayMedia(url) {
-      const session = cast.framework.CastContext.getInstance().getCurrentSession();
-      if (session && session.getSessionState() === cast.framework.SessionState.SESSION_STARTED) {
-        const mediaInfo = new chrome.cast.media.MediaInfo(url, getContentType(url));
-        mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
-        mediaInfo.metadata.metadataType = chrome.cast.media.MetadataType.GENERIC;
-        mediaInfo.metadata.title = url.split('/').pop() || 'Video';
-        session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo))
-          .then(() => castInfoDiv.textContent = 'Casting: ' + mediaInfo.metadata.title)
-          .catch(() => { castInfoDiv.textContent = 'Error casting video'; videoPlayer.style.display = 'block'; });
+    function playLocal(url) {
+      castInfoDiv.textContent = 'Playing locally';
+      videoPlayer.style.display = 'block';
+      if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+      videoPlayer.removeAttribute('src');
+      videoPlayer.load();
+      if (url.includes('.m3u8') && Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(videoPlayer);
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => castInfoDiv.textContent = 'HLS error: ' + data.details);
       } else {
-        castInfoDiv.textContent = 'Ready to play locally';
-        videoPlayer.style.display = 'block';
-        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-        if (url.includes('.m3u8')) {
-          if (Hls.isSupported()) {
-            hlsInstance = new Hls();
-            hlsInstance.loadSource(url);
-            hlsInstance.attachMedia(videoPlayer);
-          } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl') || videoPlayer.canPlayType('application/x-mpegURL')) {
-            videoPlayer.src = url;
-          } else {
-            alert('HLS not supported.');
-            return;
-          }
-        } else {
-          videoSource.src = url;
-          videoSource.type = getContentType(url);
-        }
-        videoPlayer.load();
+        videoPlayer.src = url;
       }
+      videoPlayer.play().catch(err => {
+        // Safari requires user gesture
+      });
     }
 
-    function getContentType(url) {
-      const ext = url.split('.').pop().toLowerCase();
-      if (ext === 'm3u8') return 'application/x-mpegURL';
-      if (['mp4','webm','ogv'].includes(ext)) return 'video/' + ext;
-      return 'video/mp4';
-    }
-
-    videoPlayer.onended = () => castInfoDiv.textContent = 'Video ended';
+    videoPlayer.addEventListener('error', () => {
+      const e = videoPlayer.error;
+      const msgs = ['Unknown', 'Network', 'Decode', 'Not Supported', 'Src Missing'];
+      castInfoDiv.textContent = 'Playback Error: ' + msgs[e?.code] || 'Unknown';
+    });
   </script>
 </body>
 </html>
