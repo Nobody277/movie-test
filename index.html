@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Video Embed Player with HLS & Cast</title>
-  <link rel="preconnect" href="https://fonts.gstatic.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
     :root {
       --bg: #f2f2f2;
@@ -16,7 +16,7 @@
       --input-bg: #fff;
       --input-border: #ccc;
       --card-shadow: rgba(0,0,0,0.1);
-      --cast-button-color: #333; /* Default cast button color */
+      --cast-button-color: #333;
     }
     [data-theme="dark"] {
       --bg: #121212;
@@ -25,7 +25,7 @@
       --input-bg: #1e1e1e;
       --input-border: #444;
       --card-shadow: rgba(0,0,0,0.5);
-      --cast-button-color: #e0e0e0; /* Cast button color for dark theme */
+      --cast-button-color: #e0e0e0;
     }
     @media (prefers-color-scheme: dark) {
       :root { color-scheme: light dark; }
@@ -41,17 +41,15 @@
     }
     body {
       margin: 0;
-      padding: 0;
+      padding: 2rem 1rem;
       font-family: 'Roboto', sans-serif;
       background: var(--bg);
       color: var(--fg);
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
       align-items: center;
-      justify-content: flex-start;
+      min-height: 100vh;
       gap: 1.5rem;
-      padding: 2rem 1rem;
     }
     h1 {
       margin: 0;
@@ -63,7 +61,7 @@
       flex-wrap: wrap;
       gap: 0.5rem;
       justify-content: center;
-      align-items: center; /* Align items vertically */
+      align-items: center;
     }
     input[type="text"] {
       padding: 0.6rem 1rem;
@@ -85,9 +83,7 @@
       cursor: pointer;
       transition: filter 0.2s;
     }
-    button:hover {
-      filter: brightness(1.1);
-    }
+    button:hover { filter: brightness(1.1); }
     .theme-toggle {
       position: absolute;
       top: 1rem;
@@ -104,271 +100,144 @@
       box-shadow: 0 4px 16px var(--card-shadow);
       border-radius: 8px;
       overflow: hidden;
-      position: relative; /* For cast button positioning if needed */
     }
     #videoPlayer {
       width: 100%;
       height: auto;
       display: block;
-      background: black;
+      background: #000;
     }
-    /* Google Cast Button Styling */
     google-cast-launcher {
-      width: 24px; /* Adjust size as needed */
+      width: 24px;
       height: 24px;
       cursor: pointer;
-      margin-left: 0.5rem; /* Space from Load Video button */
-      color: var(--cast-button-color); /* Uses CSS variable for theme compatibility */
-      --cast-button-active-color: var(--accent); /* Color when casting */
+      margin-left: 0.5rem;
+      color: var(--cast-button-color);
+      --cast-button-active-color: var(--accent);
     }
     .cast-info {
-        font-size: 0.9em;
-        color: var(--fg);
-        margin-top: 0.5rem;
-        text-align: center;
+      font-size: 0.9em;
+      color: var(--fg);
+      margin-top: 0.5rem;
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <button class="theme-toggle" id="themeToggle">🌓</button>
   <h1>Video Player with HLS & Cast</h1>
-
   <div class="controls">
-    <input
-      type="text"
-      id="videoURL"
-      placeholder="Paste .mp4 or .m3u8 URL here…"
-      aria-label="Video URL"
-    />
+    <input id="videoURL" type="text" placeholder="Paste .mp4 or .m3u8 URL here…" aria-label="Video URL">
     <button id="loadBtn">Load Video</button>
     <google-cast-launcher id="castButton"></google-cast-launcher>
   </div>
-  <div id="castInfo" class="cast-info">
-    </div>
-
+  <div id="castInfo" class="cast-info"></div>
   <div id="videoContainer">
-    <video
-      id="videoPlayer"
-      controls
-      preload="metadata"
-      poster=""
-    >
-      <source id="videoSource" src="" type="video/mp4" />
+    <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline>
+      <source id="videoSource" src="" type="video/mp4">
       Your browser doesn’t support HTML5 video or HLS playback.
     </video>
   </div>
-
   <script>
-    // DOM Elements
     const loadBtn = document.getElementById('loadBtn');
     const videoURLInput = document.getElementById('videoURL');
     const videoPlayer = document.getElementById('videoPlayer');
     const videoSource = document.getElementById('videoSource');
     const themeToggle = document.getElementById('themeToggle');
     const root = document.documentElement;
-    const castButton = document.getElementById('castButton'); // Though SDK manages it directly
+    const castButton = document.getElementById('castButton');
     const castInfoDiv = document.getElementById('castInfo');
-
     let hlsInstance = null;
     let currentVideoUrl = null;
-
-    // Theme toggle
     themeToggle.addEventListener('click', () => {
-      const curr = root.getAttribute('data-theme');
-      const next = curr === 'dark' ? 'light' : 'dark';
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
     });
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) root.setAttribute('data-theme', savedTheme);
 
-    // --- Chromecast Initialization ---
-    console.log("Player script loaded. Waiting for Cast API to be available...");
-    castInfoDiv.textContent = "Initializing Cast Media Player...";
-
     window['__onGCastApiAvailable'] = function(isAvailable) {
-      console.log('__onGCastApiAvailable called. isAvailable:', isAvailable);
-      if (isAvailable) {
-        castInfoDiv.textContent = "Cast API available. Initializing Cast context...";
-        initializeCastApi();
-      } else {
-        console.error('Cast API not available.');
-        castInfoDiv.textContent = "Cast API not available. Ensure you are on Chrome and have a Cast device on the network.";
-      }
+      castInfoDiv.textContent = isAvailable
+        ? 'Initializing Cast context...'  
+        : 'Cast API not available. Use Chrome with a Cast device on the same network.';
+      if (isAvailable) initializeCastApi();
     };
 
     function initializeCastApi() {
-      console.log('initializeCastApi() called.');
-      try {
-        const castContext = cast.framework.CastContext.getInstance();
-        if (!castContext) {
-          console.error('CastContext.getInstance() returned null. Cast framework might not be fully loaded.');
-          castInfoDiv.textContent = "Error: Could not get CastContext instance.";
-          return;
-        }
-        console.log('CastContext instance obtained.');
-
-        castContext.setOptions({
-          receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-        });
-        console.log('CastContext options set. Receiver App ID:', chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID);
-        castInfoDiv.textContent = "Cast context initialized. Waiting for Cast button to detect devices.";
-
-
-        const player = new cast.framework.RemotePlayer();
-        const playerController = new cast.framework.RemotePlayerController(player);
-        console.log('RemotePlayer and RemotePlayerController created.');
-
-        playerController.addEventListener(
-          cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
-          function() {
-            console.log('Cast IS_CONNECTED_CHANGED event. Is connected:', player.isConnected);
-            if (player.isConnected) {
-              console.log('Cast connected to device.');
-              castInfoDiv.textContent = "Casting enabled. Ready to cast.";
-              if (currentVideoUrl) {
-                  loadAndPlayMedia(currentVideoUrl);
-              }
-            } else {
-              console.log('Cast disconnected.');
-              castInfoDiv.textContent = "Cast disconnected. Cast icon will appear if devices are found.";
-              // If disconnected, ensure local player is visible if it was hidden
-              videoPlayer.style.display = 'block';
-            }
+      const ctx = cast.framework.CastContext.getInstance();
+      if (!ctx) return castInfoDiv.textContent = 'Error: CastContext unavailable';
+      ctx.setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+      const player = new cast.framework.RemotePlayer();
+      const controller = new cast.framework.RemotePlayerController(player);
+      controller.addEventListener(
+        cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
+        () => {
+          if (player.isConnected && currentVideoUrl) {
+            loadAndPlayMedia(currentVideoUrl);
+            videoPlayer.style.display = 'none';
+            castInfoDiv.textContent = 'Casting: ' + currentVideoUrl;
+          } else {
+            videoPlayer.style.display = 'block';
+            castInfoDiv.textContent = 'Cast disconnected or no device found';
           }
-        );
-        console.log('IS_CONNECTED_CHANGED event listener added.');
-        // A small delay to see if the cast button appears
-        setTimeout(() => {
-            if (castButton && castButton.style.display !== 'none' && castButton.getAttribute('aria-disabled') === 'false') {
-                console.log("Cast button seems to be active or visible.");
-            } else if (castButton) {
-                console.log("Cast button is either not visible or disabled. Check for Cast devices on your network.");
-                castInfoDiv.textContent = "No Cast devices detected yet. Ensure your Chromecast is on and on the same Wi-Fi.";
-            }
-        }, 3000);
-
-
-      } catch (err) {
-        console.error('Error during Cast API initialization:', err);
-        castInfoDiv.textContent = "Error initializing Cast: " + err.message;
-      }
+        }
+      );
     }
 
-    // --- Video Loading Logic ---
     loadBtn.addEventListener('click', () => {
       const url = videoURLInput.value.trim();
-      if (!url) {
-        alert('Please paste a valid MP4 or M3U8 URL.');
-        return;
-      }
+      if (!url) return alert('Please paste a valid URL.');
       currentVideoUrl = url;
       loadAndPlayMedia(url);
     });
 
     function loadAndPlayMedia(url) {
-      console.log("loadAndPlayMedia called with URL:", url);
-      const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
-
-      if (castSession && castSession.getSessionState() === cast.framework.SessionState.SESSION_STARTED) {
-        console.log("Active Cast session found. Attempting to cast:", url);
-        castInfoDiv.textContent = `Casting: ${url.split('/').pop() || "Video"}...`;
+      const session = cast.framework.CastContext.getInstance().getCurrentSession();
+      if (session && session.getSessionState() === cast.framework.SessionState.SESSION_STARTED) {
         const mediaInfo = new chrome.cast.media.MediaInfo(url, getContentType(url));
         mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
         mediaInfo.metadata.metadataType = chrome.cast.media.MetadataType.GENERIC;
-        mediaInfo.metadata.title = "Casting: " + (url.split('/').pop() || "Video");
-        // You can add a poster image for the cast display if available
-        // mediaInfo.metadata.images = [{'url': 'YOUR_POSTER_IMAGE_URL'}];
-
-        const request = new chrome.cast.media.LoadRequest(mediaInfo);
-        castSession.loadMedia(request).then(
-          function() {
-            console.log('Media loaded on receiver successfully.');
-            castInfoDiv.textContent = `Casting: ${mediaInfo.metadata.title} on your TV.`;
-            videoPlayer.style.display = 'none'; // Hide local player while casting
-          },
-          function(errorCode) {
-            console.error('Error loading media on receiver. Error code:', errorCode);
-            castInfoDiv.textContent = "Error casting video. Code: " + errorCode;
-            videoPlayer.style.display = 'block'; // Show local player again on error
-          }
-        );
+        mediaInfo.metadata.title = url.split('/').pop() || 'Video';
+        session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo))
+          .then(() => castInfoDiv.textContent = 'Casting: ' + mediaInfo.metadata.title)
+          .catch(e => { castInfoDiv.textContent = 'Error casting video'; videoPlayer.style.display = 'block'; });
       } else {
-        console.log("No active Cast session, or session not started. Playing locally.");
-        castInfoDiv.textContent = "Playing video locally.";
+        castInfoDiv.textContent = 'Playing video locally';
         videoPlayer.style.display = 'block';
-        if (hlsInstance) {
-          hlsInstance.destroy();
-          hlsInstance = null;
-        }
-
+        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
         if (url.includes('.m3u8')) {
           if (Hls.isSupported()) {
-            console.log("Playing HLS stream locally with HLS.js");
-            hlsInstance = new Hls({ debug: false }); // Enable debug:true for more HLS logs
+            hlsInstance = new Hls();
             hlsInstance.loadSource(url);
             hlsInstance.attachMedia(videoPlayer);
-            hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
-              videoPlayer.play().catch(e => console.error("Error playing HLS:", e));
-            });
-            hlsInstance.on(Hls.Events.ERROR, function (event, data) {
-              console.error("HLS.js Error:", data);
-              if (data.fatal) {
-                switch(data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    hlsInstance.startLoad();
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    hlsInstance.recoverMediaError();
-                    break;
-                  default:
-                    hlsInstance.destroy();
-                    break;
-                }
-              }
-            });
-          } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl') || videoPlayer.canPlayType('application/x-mpegURL')) {
-            console.log("Playing HLS stream natively (e.g., Safari)");
+            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => videoPlayer.play());
+          } else if (videoPlayer.canPlayType('application/x-mpegURL')) {
             videoPlayer.src = url;
-            videoPlayer.addEventListener('loadedmetadata', function() {
-              videoPlayer.play().catch(e => console.error("Error playing native HLS:", e));
-            });
+            videoPlayer.addEventListener('loadedmetadata', () => videoPlayer.play());
           } else {
-            alert('HLS is not supported in this browser.');
-            castInfoDiv.textContent = "HLS not supported for local playback.";
+            alert('HLS not supported.');
           }
         } else {
-          console.log("Playing MP4 stream locally");
           videoSource.src = url;
           videoSource.type = getContentType(url);
           videoPlayer.load();
-          videoPlayer.play().catch(e => console.error("Error playing MP4:", e));
+          videoPlayer.play();
         }
       }
     }
 
     function getContentType(url) {
-        const ext = url.split('.').pop().toLowerCase();
-        if (ext === 'm3u8') {
-            return 'application/x-mpegURL';
-        } else if (ext === 'mp4') {
-            return 'video/mp4';
-        } else if (ext === 'webm') {
-            return 'video/webm';
-        } else if (ext === 'ogv') {
-            return 'video/ogg';
-        }
-        // Default for unknown types, or if URL has no extension (less likely for direct files)
-        console.warn(`Unknown extension or no extension for URL: ${url}. Defaulting to video/mp4`);
-        return 'video/mp4';
+      const ext = url.split('.').pop().toLowerCase();
+      if (ext === 'm3u8') return 'application/x-mpegURL';
+      if (['mp4','webm','ogv'].includes(ext)) return 'video/' + ext;
+      return 'video/mp4';
     }
 
-    videoPlayer.onended = function() {
-      console.log("Local video finished playing.");
-      castInfoDiv.textContent = "Local video ended.";
-    };
-
+    videoPlayer.onended = () => castInfoDiv.textContent = 'Video ended';
   </script>
 </body>
 </html>
