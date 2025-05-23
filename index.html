@@ -108,6 +108,42 @@
       background: var(--input-bg);
       color: var(--fg);
     }
+    /* Modal */
+    .modal {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s ease;
+    }
+    .modal.visible {
+      opacity: 1; pointer-events: auto;
+    }
+    .modalBox {
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 4px 16px var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .modalHeader { font-size: 1.25rem; }
+    #shareURL {
+      width: 100%;
+      padding: .6rem 1rem;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      background: var(--input-bg);
+      color: var(--fg);
+    }
+    .modalActions { display: flex; justify-content: flex-end; gap: .5rem; }
+    #copyBtn { background: var(--fg); color: #000; }
+    #closeModal { background: var(--accent); }
     @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
@@ -119,7 +155,7 @@
         <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline></video>
       </div>
       <div id="controls">
-        <input id="videoURL" type="text" placeholder="Paste .mp4 or .m3u8 URL…" aria-label="Video URL">
+        <input id="videoURL" type="text" placeholder="Paste .mp4 or .m3u8 URL…">
         <button id="loadBtn">Load Video</button>
         <button id="createRoom">Create Room</button>
       </div>
@@ -133,16 +169,29 @@
       </div>
     </aside>
   </div>
+  <div id="shareModal" class="modal">
+    <div class="modalBox">
+      <div class="modalHeader">Share Room Link</div>
+      <input id="shareURL" type="text" readonly>
+      <div class="modalActions">
+        <button id="copyBtn">Copy</button>
+        <button id="closeModal">Close</button>
+      </div>
+    </div>
+  </div>
   <script>
     const loadBtn     = document.getElementById('loadBtn');
     const createRoom  = document.getElementById('createRoom');
     const videoURLIn  = document.getElementById('videoURL');
     const videoPlayer = document.getElementById('videoPlayer');
+    const shareModal  = document.getElementById('shareModal');
+    const shareURL    = document.getElementById('shareURL');
+    const copyBtn     = document.getElementById('copyBtn');
+    const closeModal  = document.getElementById('closeModal');
     let hls;
 
     loadBtn.addEventListener('click', () => {
-      const url = videoURLIn.value.trim();
-      if (!url) return;
+      const url = videoURLIn.value.trim(); if (!url) return;
       if (hls) { hls.destroy(); hls = null; }
       videoPlayer.src = '';
       if (url.includes('.m3u8') && Hls.isSupported()) {
@@ -154,11 +203,18 @@
     });
 
     createRoom.addEventListener('click', () => {
-      const current = videoPlayer.currentSrc || videoURLIn.value.trim();
-      if (!current) return;
+      const current = videoPlayer.currentSrc || videoURLIn.value.trim(); if (!current) return;
       const id = Math.random().toString(36).substr(2, 9);
-      const shareURL = `${location.origin}${location.pathname}?room=${id}&video=${encodeURIComponent(current)}`;
-      prompt('Share this link with friends:', shareURL);
+      const link = `${location.origin}${location.pathname}?room=${id}&video=${encodeURIComponent(current)}`;
+      shareURL.value = link;
+      shareModal.classList.add('visible');
+    });
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(shareURL.value);
+    });
+    closeModal.addEventListener('click', () => {
+      shareModal.classList.remove('visible');
     });
 
     const params = new URLSearchParams(location.search);
@@ -179,13 +235,10 @@
     const chatMsgs   = document.getElementById('chatMessages');
     function appendMessage(text) {
       const el = document.createElement('div'); el.className = 'chatMessage'; el.textContent = text;
-      chatMsgs.append(el);
-      chatMsgs.scrollTop = chatMsgs.scrollHeight;
+      chatMsgs.append(el); chatMsgs.scrollTop = chatMsgs.scrollHeight;
     }
     sendBtn.addEventListener('click', () => {
-      const t = chatInput.value.trim(); if (!t) return;
-      appendMessage(t);
-      chatInput.value = '';
+      const t = chatInput.value.trim(); if (!t) return; appendMessage(t); chatInput.value = '';
     });
     chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') { sendBtn.click(); e.preventDefault(); }});
   </script>
