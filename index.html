@@ -6,7 +6,7 @@
   <title>Video Embed Player with HLS & Cast</title>
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <script>console.log('Version 1.1');</script>
+  <script>console.log('Version 1.3');</script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
@@ -27,11 +27,11 @@
     #videoContainer { width: 90vw; max-width: 1200px; box-shadow: 0 4px 16px var(--card-shadow); border-radius: 8px; overflow: hidden; }
     #videoPlayer { width: 100%; height: auto; display: block; background: #000; }
     google-cast-launcher { width: 24px; height: 24px; cursor: pointer; margin-left: 0.5rem; color: var(--cast-button-color); --cast-button-active-color: var(--accent); }
-    .cast-info { font-size: 0.9em; color: var(--fg); margin-top: 0.5rem; text-align: center; }
+    .cast-info { font-size: 0.9em; color: var(--fg); margin-top: 0.5rem; text-align: center; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <div id="versionTag">v1.1</div>
+  <div id="versionTag">v1.3</div>
   <button class="theme-toggle" id="themeToggle">🌓</button>
   <h1>Video Player with HLS & Cast</h1>
   <div class="controls">
@@ -39,87 +39,96 @@
     <button id="loadBtn">Load Video</button>
     <google-cast-launcher id="castButton"></google-cast-launcher>
   </div>
-  <div id="castInfo" class="cast-info"></div>
+  <div id="castInfo" class="cast-info">Initializing...</div>
   <div id="videoContainer">
-    <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline>
-      <source id="videoSource" src="" type="video/mp4">
-      Your browser doesn’t support HTML5 video or HLS playback.
-    </video>
+    <video id="videoPlayer" controls preload="metadata" playsinline webkit-playsinline></video>
   </div>
   <script>
+    const video = document.getElementById('videoPlayer');
     const loadBtn = document.getElementById('loadBtn');
-    const videoURLInput = document.getElementById('videoURL');
-    const videoPlayer = document.getElementById('videoPlayer');
+    const urlInput = document.getElementById('videoURL');
+    const castInfo = document.getElementById('castInfo');
     const themeToggle = document.getElementById('themeToggle');
     const root = document.documentElement;
-    const castInfoDiv = document.getElementById('castInfo');
     let hlsInstance = null;
-    let currentVideoUrl = null;
+    let currentVideo = '';
 
-    themeToggle.addEventListener('click', () => {
-      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
-    });
-    if (localStorage.getItem('theme')) {
-      root.setAttribute('data-theme', localStorage.getItem('theme'));
-    }
-
-    window['__onGCastApiAvailable'] = function(isAvailable) {
-      castInfoDiv.textContent = isAvailable ? 'Initializing Cast context...' : 'Cast API unavailable';
-      if (isAvailable) initCast();
+    themeToggle.onclick = () => {
+      const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
     };
-    function initCast() {
-      const ctx = cast.framework.CastContext.getInstance();
-      ctx.setOptions({ receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID, autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED });
-      const player = new cast.framework.RemotePlayer();
-      const controller = new cast.framework.RemotePlayerController(player);
-      controller.addEventListener(cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED, () => {
-        if (player.isConnected && currentVideoUrl) {
-          playCastMedia(currentVideoUrl);
-          videoPlayer.style.display = 'none';
-        } else {
-          videoPlayer.style.display = 'block';
+    if (localStorage.getItem('theme')) root.setAttribute('data-theme', localStorage.getItem('theme'));
+
+    window.__onGCastApiAvailable = avail => {
+      if (!avail) return castInfo.textContent = 'Cast SDK unavailable';
+      initializeCast();
+    };
+
+    function initializeCast() {
+      const context = cast.framework.CastContext.getInstance();
+      context.setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.TAB_AND_ORIGIN_SCOPED
+      });
+      context.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, e => {
+        switch (e.sessionState) {
+          case cast.framework.SessionState.SESSION_STARTED:
+          case cast.framework.SessionState.SESSION_RESUMED:
+            castInfo.textContent = 'Connected. Loading media…';
+            loadMedia(currentVideo);
+            video.style.display = 'none';
+            break;
+          case cast.framework.SessionState.SESSION_ENDED:
+            castInfo.textContent = 'Session ended';
+            video.style.display = 'block';
+            break;
+          default:
+            break;
         }
       });
-    }
-    function playCastMedia(url) {
-      const session = cast.framework.CastContext.getInstance().getCurrentSession();
-      const mediaInfo = new chrome.cast.media.MediaInfo(url, url.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4');
-      session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo));
-      castInfoDiv.textContent = 'Casting: ' + url;
+      castInfo.textContent = 'Cast ready';
     }
 
-    loadBtn.addEventListener('click', () => {
-      const url = videoURLInput.value.trim();
+    function loadMedia(url) {
       if (!url) return;
-      currentVideoUrl = url;
-      playLocal(url);
-    });
+      const mediaInfo = new chrome.cast.media.MediaInfo(url, url.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4');
+      const request = new chrome.cast.media.LoadRequest(mediaInfo);
+      cast.framework.CastContext.getInstance().getCurrentSession().loadMedia(request)
+        .then(() => castInfo.textContent = 'Casting: ' + mediaInfo.contentId)
+        .catch(err => castInfo.textContent = 'Cast error: ' + err.message);
+    }
+
+    loadBtn.onclick = () => {
+      const url = urlInput.value.trim();
+      if (!url) return;
+      currentVideo = url;
+      if (cast.framework.CastContext.getInstance().getSessionState() === cast.framework.SessionState.SESSION_STARTED) {
+        loadMedia(url);
+      } else {
+        playLocal(url);
+      }
+    };
 
     function playLocal(url) {
-      castInfoDiv.textContent = 'Playing locally';
-      videoPlayer.style.display = 'block';
+      video.style.display = 'block';
+      castInfo.textContent = 'Playing locally';
       if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-      videoPlayer.removeAttribute('src');
-      videoPlayer.load();
-      if (url.includes('.m3u8') && Hls.isSupported()) {
+      if (url.endsWith('.m3u8') && Hls.isSupported()) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
-        hlsInstance.attachMedia(videoPlayer);
-        hlsInstance.on(Hls.Events.ERROR, (event, data) => castInfoDiv.textContent = 'HLS error: ' + data.details);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.ERROR, (_e, data) => castInfo.textContent = 'HLS error: ' + data.details);
       } else {
-        videoPlayer.src = url;
+        video.src = url;
       }
-      videoPlayer.play().catch(err => {
-        // Safari requires user gesture
-      });
+      video.play().catch(() => {});
     }
 
-    videoPlayer.addEventListener('error', () => {
-      const e = videoPlayer.error;
-      const msgs = ['Unknown', 'Network', 'Decode', 'Not Supported', 'Src Missing'];
-      castInfoDiv.textContent = 'Playback Error: ' + msgs[e?.code] || 'Unknown';
+    video.addEventListener('error', () => {
+      const code = video.error?.code || 0;
+      const msgs = ['Unknown','Network','Decode','Not Supported','Src Missing'];
+      castInfo.textContent = 'Playback Error: ' + (msgs[code] || 'Unknown');
     });
   </script>
 </body>
