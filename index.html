@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Movie Night Sync</title>
   <meta property="og:title" content="Movie Night Sync">
-  <meta property="og:description" content="Join a synced movie room with friends and chat live!">
+  <meta property="og:description" content="Watch movies or shows with your friends in sync!">
   <meta property="og:image" content="https://yourdomain.com/og-image.png">
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -216,30 +216,34 @@
   <script>
     const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
     const socket = io(SOCKET_SERVER_URL);
-
     let hls, currentSource = '', username = '';
+    let suppressSync = false;
+    const SYNC_DELAY = 200;
+
     const params       = new URLSearchParams(location.search);
     const inRoom       = params.has('room');
     const roomId       = params.get('room');
 
-    // UI elements
     const usernameDisplay = document.getElementById('usernameDisplay');
-    const userPrompt     = document.getElementById('userPrompt');
-    const setUserBtn     = document.getElementById('setUser');
-    const usernameInput  = document.getElementById('usernameInput');
-    const loadBtn        = document.getElementById('loadBtn');
-    const createRoomBtn  = document.getElementById('createRoom');
-    const videoURLInput  = document.getElementById('videoURL');
-    const videoPlayer    = document.getElementById('videoPlayer');
-    const shareModal     = document.getElementById('shareModal');
-    const shareURLInput  = document.getElementById('shareURL');
-    const copyBtn        = document.getElementById('copyBtn');
-    const closeModalBtn  = document.getElementById('closeModal');
-    const chatInput      = document.getElementById('chatInput');
-    const sendBtn        = document.getElementById('sendBtn');
-    const chatMsgs       = document.getElementById('chatMessages');
+    const userPrompt      = document.getElementById('userPrompt');
+    const setUserBtn      = document.getElementById('setUser');
+    const usernameInput   = document.getElementById('usernameInput');
+    const loadBtn         = document.getElementById('loadBtn');
+    const createRoomBtn   = document.getElementById('createRoom');
+    const videoURLInput   = document.getElementById('videoURL');
+    const videoPlayer     = document.getElementById('videoPlayer');
+    const shareModal      = document.getElementById('shareModal');
+    const shareURLInput   = document.getElementById('shareURL');
+    const copyBtn         = document.getElementById('copyBtn');
+    const closeModalBtn   = document.getElementById('closeModal');
+    const chatInput       = document.getElementById('chatInput');
+    const sendBtn         = document.getElementById('sendBtn');
+    const chatMsgs        = document.getElementById('chatMessages');
 
-    // Username prompt
+    function safeEmit(event, data) {
+      if (!suppressSync) socket.emit(event, data);
+    }
+
     setUserBtn.onclick = () => {
       const v = usernameInput.value.trim();
       if (!v) return;
@@ -248,11 +252,14 @@
       userPrompt.classList.remove('visible');
     };
 
-    // Load a new URL
     loadBtn.onclick = () => {
       const url = videoURLInput.value.trim();
       if (!url) return;
       currentSource = url;
+      loadVideo(url);
+    };
+
+    function loadVideo(url) {
       if (hls) { hls.destroy(); hls = null; }
       videoPlayer.src = '';
       if (url.endsWith('.m3u8') && Hls.isSupported()) {
@@ -262,66 +269,70 @@
       } else {
         videoPlayer.src = url;
       }
-      videoPlayer.play().catch(() => {});
-    };
+      videoPlayer.play().catch(()=>{});
+    }
 
-    // Create room link
     createRoomBtn.onclick = () => {
       const src = currentSource || videoURLInput.value.trim();
       if (!src) return;
-      const id   = Math.random().toString(36).substr(2,9);
+      const id = Math.random().toString(36).substr(2,9);
       const link = `${location.origin}${location.pathname}?room=${id}&video=${encodeURIComponent(src)}`;
       shareURLInput.value = link;
       shareModal.classList.add('visible');
     };
 
-    copyBtn.onclick       = () => navigator.clipboard.writeText(shareURLInput.value);
-    closeModalBtn.onclick  = () => shareModal.classList.remove('visible');
+    copyBtn.onclick      = () => navigator.clipboard.writeText(shareURLInput.value);
+    closeModalBtn.onclick = () => shareModal.classList.remove('visible');
 
-    // If joining a room…
     if (inRoom) {
       createRoomBtn.style.display = 'none';
-
-      // preload & play the video param
       if (params.has('video')) {
-        const v = decodeURIComponent(params.get('video'));
-        currentSource = v;
-        if (hls) { hls.destroy(); hls = null; }
-        videoPlayer.src = '';
-        if (v.endsWith('.m3u8') && Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(v);
-          hls.attachMedia(videoPlayer);
-        } else {
-          videoPlayer.src = v;
-        }
-        videoPlayer.play().catch(() => {});
+        currentSource = decodeURIComponent(params.get('video'));
+        loadVideo(currentSource);
       }
 
-      // join + init state
       socket.emit('joinRoom', { roomId, videoUrl: currentSource });
-      socket.on('init', ({ currentTime, paused }) => {
+      socket.on('init', ({ videoUrl, currentTime, paused }) => {
+        suppressSync = true;
+        if (videoUrl && videoUrl !== currentSource) {
+          currentSource = videoUrl;
+          loadVideo(videoUrl);
+        }
         const applyState = () => {
           videoPlayer.currentTime = currentTime;
           paused ? videoPlayer.pause() : videoPlayer.play();
+          setTimeout(() => suppressSync = false, SYNC_DELAY);
         };
         if (!videoPlayer.readyState) {
           videoPlayer.addEventListener('loadedmetadata', applyState, { once: true });
         } else applyState();
       });
 
-      // broadcast our actions
-      videoPlayer.addEventListener('play',  () => socket.emit('play',  { roomId, time: videoPlayer.currentTime }));
-      videoPlayer.addEventListener('pause', () => socket.emit('pause', { roomId, time: videoPlayer.currentTime }));
-      videoPlayer.addEventListener('seeked',() => socket.emit('seek',  { roomId, time: videoPlayer.currentTime }));
+      ['play','pause','seeked'].forEach(evt =>
+        videoPlayer.addEventListener(evt, () =>
+          safeEmit(evt === 'seeked' ? 'seek' : evt, { roomId, time: videoPlayer.currentTime })
+        )
+      );
 
-      // react to others
-      socket.on('play',  ({ time }) => { videoPlayer.currentTime = time; videoPlayer.play().catch(()=>{}); });
-      socket.on('pause', ({ time }) => { videoPlayer.currentTime = time; videoPlayer.pause(); });
-      socket.on('seek',  ({ time }) => { videoPlayer.currentTime = time; });
+      socket.on('play',  ({ time }) => {
+        suppressSync = true;
+        videoPlayer.currentTime = time;
+        videoPlayer.play().catch(()=>{});
+        setTimeout(() => suppressSync = false, SYNC_DELAY);
+      });
+      socket.on('pause', ({ time }) => {
+        suppressSync = true;
+        videoPlayer.currentTime = time;
+        videoPlayer.pause();
+        setTimeout(() => suppressSync = false, SYNC_DELAY);
+      });
+      socket.on('seek',  ({ time }) => {
+        suppressSync = true;
+        videoPlayer.currentTime = time;
+        setTimeout(() => suppressSync = false, SYNC_DELAY);
+      });
     }
 
-    // simple chat
     function appendMessage(user, text) {
       const el = document.createElement('div');
       el.className = 'chatMessage';
