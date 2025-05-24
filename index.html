@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Movie Night</title>
+  <title>Movie Night Sync</title>
   <meta property="og:title" content="Movie Night Sync">
   <meta property="og:description" content="Join a synced movie room with friends and chat live!">
   <meta property="og:image" content="https://yourdomain.com/og-image.png">
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <style>
     :root {
       --bg-gradient: linear-gradient(135deg,#000,#2e003e);
@@ -30,10 +31,7 @@
       height: 100vh;
       overflow: hidden;
     }
-    #mainContent {
-      display: flex;
-      flex: 1;
-    }
+    #mainContent { display: flex; flex: 1; }
     #videoSection {
       flex: 2;
       display: flex;
@@ -59,16 +57,8 @@
       border-radius: 8px;
       overflow: hidden;
     }
-    #videoPlayer {
-      width: 100%;
-      height: auto;
-      background: #000;
-    }
-    #controls {
-      margin-top: 1rem;
-      display: flex;
-      gap: .5rem;
-    }
+    #videoPlayer { width: 100%; height: auto; background: #000; }
+    #controls { margin-top: 1rem; display: flex; gap: .5rem; }
     #videoURL {
       flex: 1;
       max-width: 600px;
@@ -89,9 +79,7 @@
       transition: transform .2s;
       padding: .6rem 1.2rem;
     }
-    button:hover {
-      transform: scale(1.05);
-    }
+    button:hover { transform: scale(1.05); }
     #chatHeader {
       padding: 1rem;
       font-size: 1.2rem;
@@ -100,9 +88,7 @@
       justify-content: space-between;
       align-items: center;
     }
-    #usernameDisplay {
-      font-weight: 500;
-    }
+    #usernameDisplay { font-weight: 500; }
     #chatMessages {
       flex: 1;
       overflow-y: auto;
@@ -118,10 +104,7 @@
       max-width: 80%;
       animation: fadeIn .5s ease;
     }
-    .chatMessage .user {
-      font-weight: 500;
-      margin-right: .5rem;
-    }
+    .chatMessage .user { font-weight: 500; margin-right: .5rem; }
     #chatInputContainer {
       display: flex;
       padding: .75rem;
@@ -136,23 +119,12 @@
       color: var(--fg);
     }
     .modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .3s ease;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity .3s ease;
     }
-    .modal.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    .modal.visible { opacity: 1; pointer-events: auto; }
     .modalBox {
       background: #1a1a1a;
       border-radius: 8px;
@@ -164,9 +136,7 @@
       flex-direction: column;
       gap: 1rem;
     }
-    .modalHeader {
-      font-size: 1.25rem;
-    }
+    .modalHeader { font-size: 1.25rem; }
     .modalBox input {
       width: 100%;
       padding: .6rem 1rem;
@@ -180,24 +150,16 @@
       justify-content: flex-end;
       gap: .5rem;
     }
-    #copyBtn {
-      background: var(--fg);
-      color: #000;
-    }
+    #copyBtn { background: var(--fg); color: #000; }
     #userPrompt {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      position: absolute; bottom: 0; left: 0; right: 0;
       background: rgba(0,0,0,0.85);
       padding: 1rem;
       display: none;
       align-items: center;
       gap: .5rem;
     }
-    #userPrompt.visible {
-      display: flex;
-    }
+    #userPrompt.visible { display: flex; }
     #userPrompt input {
       flex: 1;
       padding: .5rem .75rem;
@@ -206,14 +168,8 @@
       background: var(--input-bg);
       color: var(--fg);
     }
-    @keyframes slideIn {
-      from { transform: translateX(100%); }
-      to { transform: translateX(0); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
@@ -228,6 +184,7 @@
         <button id="createRoom">Create Room</button>
       </div>
     </section>
+
     <aside id="chatSidebar">
       <div id="chatHeader">
         <span>Chat</span>
@@ -257,45 +214,46 @@
   </div>
 
   <script>
-    let hls;
-    let currentSource = '';
-    let username = '';
-    const usernameDisplay = document.getElementById('usernameDisplay');
-    const userPrompt = document.getElementById('userPrompt');
-    const setUser = document.getElementById('setUser');
-    const usernameInput = document.getElementById('usernameInput');
+    const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
+    const socket = io(SOCKET_SERVER_URL);
 
-    setUser.onclick = () => {
-      const val = usernameInput.value.trim();
-      if (!val) return;
-      username = val;
-      usernameDisplay.textContent = username;
+    let hls, currentSource = '', username = '';
+    const params       = new URLSearchParams(location.search);
+    const inRoom       = params.has('room');
+    const roomId       = params.get('room');
+
+    // UI elements
+    const usernameDisplay = document.getElementById('usernameDisplay');
+    const userPrompt     = document.getElementById('userPrompt');
+    const setUserBtn     = document.getElementById('setUser');
+    const usernameInput  = document.getElementById('usernameInput');
+    const loadBtn        = document.getElementById('loadBtn');
+    const createRoomBtn  = document.getElementById('createRoom');
+    const videoURLInput  = document.getElementById('videoURL');
+    const videoPlayer    = document.getElementById('videoPlayer');
+    const shareModal     = document.getElementById('shareModal');
+    const shareURLInput  = document.getElementById('shareURL');
+    const copyBtn        = document.getElementById('copyBtn');
+    const closeModalBtn  = document.getElementById('closeModal');
+    const chatInput      = document.getElementById('chatInput');
+    const sendBtn        = document.getElementById('sendBtn');
+    const chatMsgs       = document.getElementById('chatMessages');
+
+    // Username prompt
+    setUserBtn.onclick = () => {
+      const v = usernameInput.value.trim();
+      if (!v) return;
+      username = v;
+      usernameDisplay.textContent = v;
       userPrompt.classList.remove('visible');
     };
 
-    const loadBtn = document.getElementById('loadBtn');
-    const createRoom = document.getElementById('createRoom');
-    const videoURLIn = document.getElementById('videoURL');
-    const videoPlayer = document.getElementById('videoPlayer');
-    const shareModal = document.getElementById('shareModal');
-    const shareURL = document.getElementById('shareURL');
-    const copyBtn = document.getElementById('copyBtn');
-    const closeModal = document.getElementById('closeModal');
-
-    const params = new URLSearchParams(location.search);
-    const inRoom = params.has('room');
-    if (inRoom) {
-      createRoom.style.display = 'none';
-    }
-
+    // Load a new URL
     loadBtn.onclick = () => {
-      const url = videoURLIn.value.trim();
+      const url = videoURLInput.value.trim();
       if (!url) return;
       currentSource = url;
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
+      if (hls) { hls.destroy(); hls = null; }
       videoPlayer.src = '';
       if (url.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
@@ -307,39 +265,63 @@
       videoPlayer.play().catch(() => {});
     };
 
-    createRoom.onclick = () => {
-      const current = currentSource || videoURLIn.value.trim();
-      if (!current) return;
-      const id = Math.random().toString(36).substr(2, 9);
-      const link = `${location.origin}${location.pathname}?room=${id}&video=${encodeURIComponent(current)}`;
-      shareURL.value = link;
+    // Create room link
+    createRoomBtn.onclick = () => {
+      const src = currentSource || videoURLInput.value.trim();
+      if (!src) return;
+      const id   = Math.random().toString(36).substr(2,9);
+      const link = `${location.origin}${location.pathname}?room=${id}&video=${encodeURIComponent(src)}`;
+      shareURLInput.value = link;
       shareModal.classList.add('visible');
     };
 
-    copyBtn.onclick = () => navigator.clipboard.writeText(shareURL.value);
-    closeModal.onclick = () => shareModal.classList.remove('visible');
+    copyBtn.onclick       = () => navigator.clipboard.writeText(shareURLInput.value);
+    closeModalBtn.onclick  = () => shareModal.classList.remove('visible');
 
-    if (params.has('video')) {
-      const v = decodeURIComponent(params.get('video'));
-      currentSource = v;
-      if (hls) {
-        hls.destroy();
-        hls = null;
+    // If joining a room…
+    if (inRoom) {
+      createRoomBtn.style.display = 'none';
+
+      // preload & play the video param
+      if (params.has('video')) {
+        const v = decodeURIComponent(params.get('video'));
+        currentSource = v;
+        if (hls) { hls.destroy(); hls = null; }
+        videoPlayer.src = '';
+        if (v.endsWith('.m3u8') && Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(v);
+          hls.attachMedia(videoPlayer);
+        } else {
+          videoPlayer.src = v;
+        }
+        videoPlayer.play().catch(() => {});
       }
-      videoPlayer.src = '';
-      if (v.endsWith('.m3u8') && Hls.isSupported()) {
-        hls = new Hls();
-        hls.loadSource(v);
-        hls.attachMedia(videoPlayer);
-      } else {
-        videoPlayer.src = v;
-      }
-      videoPlayer.play().catch(() => {});
+
+      // join + init state
+      socket.emit('joinRoom', { roomId, videoUrl: currentSource });
+      socket.on('init', ({ currentTime, paused }) => {
+        const applyState = () => {
+          videoPlayer.currentTime = currentTime;
+          paused ? videoPlayer.pause() : videoPlayer.play();
+        };
+        if (!videoPlayer.readyState) {
+          videoPlayer.addEventListener('loadedmetadata', applyState, { once: true });
+        } else applyState();
+      });
+
+      // broadcast our actions
+      videoPlayer.addEventListener('play',  () => socket.emit('play',  { roomId, time: videoPlayer.currentTime }));
+      videoPlayer.addEventListener('pause', () => socket.emit('pause', { roomId, time: videoPlayer.currentTime }));
+      videoPlayer.addEventListener('seeked',() => socket.emit('seek',  { roomId, time: videoPlayer.currentTime }));
+
+      // react to others
+      socket.on('play',  ({ time }) => { videoPlayer.currentTime = time; videoPlayer.play().catch(()=>{}); });
+      socket.on('pause', ({ time }) => { videoPlayer.currentTime = time; videoPlayer.pause(); });
+      socket.on('seek',  ({ time }) => { videoPlayer.currentTime = time; });
     }
 
-    const chatInput = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const chatMsgs = document.getElementById('chatMessages');
+    // simple chat
     function appendMessage(user, text) {
       const el = document.createElement('div');
       el.className = 'chatMessage';
