@@ -175,10 +175,10 @@
       const socket            = io(SOCKET_SERVER_URL);
 
       // drift‑sync
-      const SYNC_INTERVAL   = 5000,
-            SNAP_THRESHOLD  = 0.5,
-            NUDGE_THRESHOLD = 0.1,
-            NUDGE_WINDOW    = 2;
+      const SYNC_INTERVAL   = 5000;   // ms between drift checks
+      const SNAP_THRESHOLD  = 2.0;    // seconds: snap if drift > this
+      const NUDGE_THRESHOLD = 0.1;    // seconds: start nudging if drift > this
+      const NUDGE_WINDOW    = 2;      // seconds over which to correct via playbackRate
 
       let hls, currentSource = '', username = '';
       let suppressSync = false;
