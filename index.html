@@ -185,14 +185,13 @@
       const FRONTEND_LINK     = `${location.origin}${location.pathname}`;
       const socket            = io(SOCKET_SERVER_URL);
 
-      // sync parameters
-      const SYNC_INTERVAL     = 1000;    // ms
-      const HARD_THRESHOLD    = 1.0;     // seconds
+      // Sync tuning
+      const SYNC_INTERVAL     = 1000;
+      const HARD_THRESHOLD    = 1.0;
       const NUDGE_FACTOR      = 0.1;
-      const MIN_PLAYBACK_RATE = 0.95;
-      const MAX_PLAYBACK_RATE = 1.05;
+      const MIN_RATE          = 0.95;
+      const MAX_RATE          = 1.05;
 
-      // state
       let hls, currentSource = '';
       let latency = 0, initState = null;
       let suppressSeek = false, suppressPlay = false, suppressPause = false;
@@ -338,14 +337,23 @@
       function setupSync() {
         player.addEventListener('seeked', () => {
           if (suppressSeek) { suppressSeek = false; return; }
+          // user-initiated seek: update local baseline
+          initState.currentTime = player.currentTime;
+          initState.lastUpdate = Date.now();
           safeEmit('seek', { roomId, time: player.currentTime });
         });
         player.addEventListener('play', () => {
           if (suppressPlay) { suppressPlay = false; return; }
+          initState.currentTime = player.currentTime;
+          initState.lastUpdate = Date.now();
+          initState.paused = false;
           safeEmit('play', { roomId, time: player.currentTime });
         });
         player.addEventListener('pause', () => {
           if (suppressPause) { suppressPause = false; return; }
+          initState.currentTime = player.currentTime;
+          initState.lastUpdate = Date.now();
+          initState.paused = true;
           safeEmit('pause', { roomId, time: player.currentTime });
         });
 
@@ -383,13 +391,12 @@
             player.currentTime = serverTime;
           } else {
             player.playbackRate = Math.min(
-              MAX_PLAYBACK_RATE,
-              Math.max(MIN_PLAYBACK_RATE, 1 + diff * NUDGE_FACTOR)
+              MAX_RATE,
+              Math.max(MIN_RATE, 1 + diff * NUDGE_FACTOR)
             );
           }
         }, SYNC_INTERVAL);
 
-        // periodic authoritative state refresh
         setInterval(() => {
           socket.emit('getState', { roomId });
         }, SYNC_INTERVAL * 5);
