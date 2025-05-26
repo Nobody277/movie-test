@@ -286,6 +286,12 @@
         userPrompt.classList.remove('visible');
       });
 
+      usernameIn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          setUserBtn.click();
+        }
+      });
+
       sendBtn.addEventListener('click', () => {
         const msg = chatInput.value.trim();
         if (!msg) return;
@@ -296,6 +302,12 @@
         safeEmit('chat', { roomId, msg, username });
         appendMessage(username, msg);
         chatInput.value = '';
+      });
+      
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          sendBtn.click();
+        }
       });
       socket.on('chat', data => appendMessage(data.username, data.msg));
 
