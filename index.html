@@ -184,6 +184,7 @@
       const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
       const FRONTEND_LINK     = `${location.origin}${location.pathname}`;
       const socket            = io(SOCKET_SERVER_URL);
+      const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
       // Sync tuning
       const SYNC_INTERVAL     = 1000;
@@ -380,6 +381,7 @@
       }
 
       function startSmoothSync() {
+        if (isMobile) return;
         setInterval(() => {
           const now     = Date.now();
           const elapsed = (now - initState.lastUpdate - latency) / 1000;
