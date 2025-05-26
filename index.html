@@ -33,19 +33,25 @@
     #videoSection {
       flex: 2; display: flex; flex-direction: column;
       align-items: center; justify-content: center; padding: 1rem;
-    }
-    #chatSidebar {
-      position: relative; flex: 1; max-width: 350px;
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
-      display: flex; flex-direction: column;
-      animation: slideIn 1s ease forwards;
+      position: relative;
     }
     #videoContainer {
       width: 100%; max-width: 900px;
       box-shadow: 0 4px 16px var(--card-shadow);
       border-radius: 8px; overflow: hidden;
+      position: relative;
     }
     #videoPlayer { width: 100%; height: auto; background: #000; }
+    #syncOverlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; display: none;
+    }
+    #joinSyncBtn {
+      padding: 1rem 2rem; font-size: 1.2rem; border: none; border-radius: 6px;
+      background: var(--accent); color: #fff; cursor: pointer;
+    }
     #controls { margin-top: 1rem; display: flex; gap: .5rem; }
     #videoURL {
       flex: 1; max-width: 600px;
@@ -61,6 +67,12 @@
       padding: .6rem 1.2rem;
     }
     button:hover { transform: scale(1.05); }
+    #chatSidebar {
+      position: relative; flex: 1; max-width: 350px;
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+      display: flex; flex-direction: column;
+      animation: slideIn 1s ease forwards;
+    }
     #chatHeader {
       padding: 1rem; font-size: 1.2rem;
       border-bottom: 1px solid var(--input-border);
@@ -133,9 +145,12 @@
     <section id="videoSection">
       <div id="videoContainer">
         <video id="videoPlayer" controls playsinline webkit-playsinline></video>
+        <div id="syncOverlay">
+          <button id="joinSyncBtn">Click to join synchronized playback</button>
+        </div>
       </div>
       <div id="controls">
-        <input id="videoURL" type="text" placeholder="Paste URL…">
+        <input id="videoURL" placeholder="Paste URL…" />
         <button id="loadBtn">Load Video</button>
         <button id="createRoom">Create Room</button>
       </div>
@@ -148,11 +163,11 @@
       </div>
       <div id="chatMessages"></div>
       <div id="chatInputContainer">
-        <input id="chatInput" type="text" placeholder="Type a message…">
+        <input id="chatInput" placeholder="Type a message…" />
         <button id="sendBtn">Send</button>
       </div>
       <div id="userPrompt">
-        <input id="usernameInput" type="text" placeholder="Enter username…">
+        <input id="usernameInput" placeholder="Enter username…" />
         <button id="setUser">OK</button>
       </div>
     </aside>
@@ -161,7 +176,7 @@
   <div id="shareModal" class="modal">
     <div class="modalBox">
       <div class="modalHeader">Room Link</div>
-      <input id="shareURL" readonly>
+      <input id="shareURL" readonly />
       <div class="modalActions">
         <button id="copyBtn">Copy</button>
         <button id="closeModal">Close</button>
@@ -199,6 +214,8 @@
     const userPrompt      = document.getElementById('userPrompt');
     const usernameInput   = document.getElementById('usernameInput');
     const setUserBtn      = document.getElementById('setUser');
+    const overlay         = document.getElementById('syncOverlay');
+    const joinBtn         = document.getElementById('joinSyncBtn');
 
     function loadVideo(url) {
       if (hls) { hls.destroy(); hls = null; }
@@ -253,54 +270,64 @@
       if (!suppressSync) socket.emit(evt, data);
     }
 
+    let initState;
     if (inRoom) {
       createBtn.style.display = 'none';
       socket.emit('joinRoom', { roomId });
 
-      socket.on('init', ({ videoUrl, currentTime, paused, lastUpdate }) => {
-        suppressSync = true;
+      socket.on('init', state => {
+        initState = state;
+        const { videoUrl, currentTime, paused, lastUpdate } = state;
         if (videoUrl !== currentSource) {
           currentSource = videoUrl;
           loadVideo(videoUrl);
         }
+        // pause and show overlay
+        player.pause();
+        overlay.style.display = 'flex';
+      });
+
+      joinBtn.onclick = () => {
+        const { currentTime, paused, lastUpdate } = initState;
         let target = currentTime;
         if (!paused) {
           const drift = (Date.now() - lastUpdate) / 1000;
           target += drift;
         }
         player.currentTime = target;
-        paused ? player.pause() : player.play();
-        player.playbackRate = 1.0;
-        setTimeout(()=> suppressSync=false, 200);
-      });
+        if (!paused) player.play();
+        overlay.style.display = 'none';
+        setupSync();
+      };
+    }
 
+    function setupSync() {
       // relay controls
       ['play','pause','seeked'].forEach(evt =>
         player.addEventListener(evt, () => {
           const t = player.currentTime;
-          safeEmit(evt==='seeked'?'seek':evt, { roomId, time: t });
+          safeEmit(evt==='seeked'? 'seek' : evt, { roomId, time: t });
         })
       );
-
       // apply remote controls
-      socket.on('play',  ({ time }) => { suppressSync=true; player.currentTime=time; player.play();  setTimeout(()=>suppressSync=false,200); });
-      socket.on('pause', ({ time }) => { suppressSync=true; player.currentTime=time; player.pause(); setTimeout(()=>suppressSync=false,200); });
-      socket.on('seek',  ({ time }) => { suppressSync=true; player.currentTime=time;               setTimeout(()=>suppressSync=false,200); });
-
-      // drift‑correction
-      socket.on('syncState', resyncState);
-      setInterval(()=> socket.emit('getState',{ roomId }), SYNC_INTERVAL);
+      socket.on('play', ({ time }) => { suppressSync=true; player.currentTime=time; player.play(); setTimeout(()=>suppressSync=false,200); });
+      socket.on('pause',({ time }) => { suppressSync=true; player.currentTime=time; player.pause(); setTimeout(()=>suppressSync=false,200); });
+      socket.on('seek', ({ time }) => { suppressSync=true; player.currentTime=time; setTimeout(()=>suppressSync=false,200); });
 
       // chat
       sendBtn.onclick = () => {
         const msg = chatInput.value.trim();
         if (!msg) return;
         if (!username) { userPrompt.classList.add('visible'); return; }
-        safeEmit('chat',{ roomId, msg, username });
-        appendMessage(username,msg);
+        safeEmit('chat', { roomId, msg, username });
+        appendMessage(username, msg);
         chatInput.value = '';
       };
-      socket.on('chat', ({ username:u, msg }) => appendMessage(u,msg));
+      socket.on('chat', ({ username:u, msg }) => appendMessage(u, msg));
+
+      // drift correction listener
+      socket.on('syncState', resyncState);
+      setInterval(() => socket.emit('getState',{ roomId }), SYNC_INTERVAL);
     }
 
     function appendMessage(user, text) {
@@ -312,34 +339,26 @@
     }
 
     function resyncState({ currentTime, paused, lastUpdate }) {
-      // if paused, snap to exact pause time but no drift
       if (paused) {
-        const diff = Math.abs(player.currentTime - currentTime);
-        if (diff > NUDGE_THRESHOLD) {
+        if (Math.abs(player.currentTime - currentTime) > NUDGE_THRESHOLD) {
           suppressSync = true;
           player.currentTime = currentTime;
-          setTimeout(()=> suppressSync=false, 200);
+          setTimeout(()=>suppressSync=false,200);
         }
-        player.playbackRate = 1.0;
         player.pause();
         return;
       }
-
-      // playing: compute drift
-      const drift = (Date.now() - lastUpdate) / 1000;
+      const drift = (Date.now() - lastUpdate)/1000;
       const target = currentTime + drift;
-      const local  = player.currentTime;
-      const diff   = target - local;
-
+      const local = player.currentTime;
+      const diff = target - local;
       if (Math.abs(diff) > SNAP_THRESHOLD) {
-        // too far: snap
         suppressSync = true;
         player.currentTime = target;
         player.playbackRate = 1.0;
-        setTimeout(()=> suppressSync=false, 200);
+        setTimeout(()=>suppressSync=false,200);
       } else if (Math.abs(diff) > NUDGE_THRESHOLD) {
-        // gentle constant nudge
-        const rate = 1 + Math.sign(diff) * 0.02;  // ±2%
+        const rate = 1 + Math.sign(diff)*0.02;
         player.playbackRate = Math.min(MAX_NUDGE_RATE, Math.max(MIN_NUDGE_RATE, rate));
       } else {
         player.playbackRate = 1.0;
