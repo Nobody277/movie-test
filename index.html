@@ -156,9 +156,14 @@
         <input id="chatInput" placeholder="Type a message…" />
         <button id="sendBtn">Send</button>
       </div>
-      <div id="userPrompt">
-        <input id="usernameInput" placeholder="Enter username…" />
-        <button id="setUser">OK</button>
+      <div id="userPrompt" class="modal">
+        <div class="modalBox">
+          <div class="modalHeader">Enter a username</div>
+          <input id="usernameInput" placeholder="Username…" />
+          <div class="modalActions">
+            <button id="setUser">OK</button>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -180,28 +185,38 @@
       const FRONTEND_LINK     = `${location.origin}${location.pathname}`;
       const socket            = io(SOCKET_SERVER_URL);
 
-      // Sync tuning
+      // sync parameters
       const SYNC_INTERVAL     = 1000;    // ms
-      const HARD_THRESHOLD    = 0.5;     // seconds
-      const NUDGE_FACTOR      = 0.1;    
+      const HARD_THRESHOLD    = 1.0;     // seconds
+      const NUDGE_FACTOR      = 0.1;
       const MIN_PLAYBACK_RATE = 0.95;
       const MAX_PLAYBACK_RATE = 1.05;
 
-      let hls, currentSource = '', username = '', latency = 0, initState = null;
-      const params = new URLSearchParams(location.search);
-      const inRoom = params.has('room'), roomId = params.get('room');
+      // state
+      let hls, currentSource = '';
+      let latency = 0, initState = null;
+      let suppressSeek = false, suppressPlay = false, suppressPause = false;
 
       // UI refs
-      const player          = document.getElementById('videoPlayer');
-      const loadBtn         = document.getElementById('loadBtn');
-      const createBtn       = document.getElementById('createRoom');
-      const chatMsgs        = document.getElementById('chatMessages');
-      const chatInput       = document.getElementById('chatInput');
-      const sendBtn         = document.getElementById('sendBtn');
-      const usernameDisplay = document.getElementById('usernameDisplay');
-      const userPrompt      = document.getElementById('userPrompt');
-      const usernameInput   = document.getElementById('usernameInput');
-      const setUserBtn      = document.getElementById('setUser');
+      const player        = document.getElementById('videoPlayer');
+      const loadBtn       = document.getElementById('loadBtn');
+      const createBtn     = document.getElementById('createRoom');
+      const videoURLIn    = document.getElementById('videoURL');
+      const chatMsgs      = document.getElementById('chatMessages');
+      const chatInput     = document.getElementById('chatInput');
+      const sendBtn       = document.getElementById('sendBtn');
+      const usernameDisp  = document.getElementById('usernameDisplay');
+      const userPrompt    = document.getElementById('userPrompt');
+      const usernameIn    = document.getElementById('usernameInput');
+      const setUserBtn    = document.getElementById('setUser');
+      const shareModal    = document.getElementById('shareModal');
+      const shareURLIn    = document.getElementById('shareURL');
+      const copyBtn       = document.getElementById('copyBtn');
+      const closeModalBtn = document.getElementById('closeModal');
+
+      let username = '';
+      const params = new URLSearchParams(location.search);
+      const inRoom = params.has('room'), roomId = params.get('room');
 
       function loadVideo(url) {
         if (hls) { hls.destroy(); hls = null; }
@@ -215,7 +230,6 @@
         }
       }
 
-      // latency ping/pong
       function measureLatency() {
         const t0 = Date.now();
         socket.emit('pingCheck', { clientTime: t0 });
@@ -224,29 +238,33 @@
         latency = (Date.now() - clientTime) / 2;
       });
 
-      // load / create room
       loadBtn.addEventListener('click', () => {
-        const url = document.getElementById('videoURL').value.trim();
+        const url = videoURLIn.value.trim();
         if (!url) return;
         currentSource = url;
         loadVideo(url);
         player.play().catch(() => {});
       });
+
       createBtn.addEventListener('click', async () => {
-        const src = currentSource || document.getElementById('videoURL').value.trim();
+        const src = currentSource || videoURLIn.value.trim();
         if (!src) return;
-        try {
-          const res = await fetch(`${SOCKET_SERVER_URL}/rooms`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoUrl: src })
-          });
-          const { roomId } = await res.json();
-          document.getElementById('shareURL').value = `${FRONTEND_LINK}?room=${roomId}`;
-          document.getElementById('shareModal').classList.add('visible');
-        } catch (e) {
-          console.error('Could not create room', e);
-        }
+        const res = await fetch(`${SOCKET_SERVER_URL}/rooms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoUrl: src })
+        });
+        const { roomId } = await res.json();
+        shareURLIn.value = `${FRONTEND_LINK}?room=${roomId}`;
+        shareModal.classList.add('visible');
+      });
+
+      copyBtn.addEventListener('click', () => {
+        shareURLIn.select();
+        document.execCommand('copy');
+      });
+      closeModalBtn.addEventListener('click', () => {
+        shareModal.classList.remove('visible');
       });
 
       function safeEmit(evt, data) {
@@ -260,21 +278,20 @@
         chatMsgs.scrollTop = chatMsgs.scrollHeight;
       }
 
-      // username
       setUserBtn.addEventListener('click', () => {
-        const v = usernameInput.value.trim();
+        const v = usernameIn.value.trim();
         if (!v) return;
         username = v;
-        usernameDisplay.textContent = v;
+        usernameDisp.textContent = v;
         userPrompt.classList.remove('visible');
       });
 
-      // chat
       sendBtn.addEventListener('click', () => {
         const msg = chatInput.value.trim();
         if (!msg) return;
         if (!username) {
-          userPrompt.classList.add('visible'); return;
+          userPrompt.classList.add('visible');
+          return;
         }
         safeEmit('chat', { roomId, msg, username });
         appendMessage(username, msg);
@@ -282,83 +299,113 @@
       });
       socket.on('chat', data => appendMessage(data.username, data.msg));
 
-      // join room
       if (inRoom) {
         createBtn.style.display = 'none';
         socket.emit('joinRoom', { roomId });
       }
 
-      // initial state
       socket.on('init', state => {
         initState = state;
         if (state.videoUrl !== currentSource) {
           currentSource = state.videoUrl;
           loadVideo(state.videoUrl);
         }
+
         measureLatency();
         player.pause();
+
         player.addEventListener('canplay', () => {
-          const now = Date.now();
+          const now     = Date.now();
           const elapsed = (now - initState.lastUpdate - latency) / 1000;
-          const targetTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-          player.currentTime = targetTime;
-          if (!initState.paused) player.play();
+          const target  = initState.currentTime + (initState.paused ? 0 : elapsed);
+
+          suppressSeek = true;
+          player.currentTime = target;
+
+          if (initState.paused) {
+            suppressPause = true;
+            player.pause();
+          } else {
+            suppressPlay = true;
+            player.play();
+          }
+
           setupSync();
           startSmoothSync();
         }, { once: true });
       });
 
       function setupSync() {
-        ['play','pause','seeked'].forEach(evt => {
-          player.addEventListener(evt, () => {
-            const t = player.currentTime;
-            const e = evt === 'seeked' ? 'seek' : evt;
-            safeEmit(e, { roomId, time: t });
-          });
+        player.addEventListener('seeked', () => {
+          if (suppressSeek) { suppressSeek = false; return; }
+          safeEmit('seek', { roomId, time: player.currentTime });
+        });
+        player.addEventListener('play', () => {
+          if (suppressPlay) { suppressPlay = false; return; }
+          safeEmit('play', { roomId, time: player.currentTime });
+        });
+        player.addEventListener('pause', () => {
+          if (suppressPause) { suppressPause = false; return; }
+          safeEmit('pause', { roomId, time: player.currentTime });
         });
 
         socket.on('play', data => {
           initState.currentTime = data.time;
-          initState.lastUpdate = Date.now();
+          initState.paused      = false;
+          initState.lastUpdate  = Date.now();
+          suppressPlay = true;
           player.play();
         });
         socket.on('pause', data => {
           initState.currentTime = data.time;
-          initState.lastUpdate = Date.now();
+          initState.paused      = true;
+          initState.lastUpdate  = Date.now();
+          suppressPause = true;
           player.pause();
         });
         socket.on('seek', data => {
           initState.currentTime = data.time;
-          initState.lastUpdate = Date.now();
+          initState.lastUpdate  = Date.now();
+          suppressSeek = true;
           player.currentTime = data.time;
         });
       }
 
       function startSmoothSync() {
         setInterval(() => {
-          const now = Date.now();
+          const now     = Date.now();
           const elapsed = (now - initState.lastUpdate - latency) / 1000;
           const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-          const diff = serverTime - player.currentTime;
+          const diff       = serverTime - player.currentTime;
+
           if (Math.abs(diff) > HARD_THRESHOLD) {
+            suppressSeek = true;
             player.currentTime = serverTime;
           } else {
-            const rate = 1 + diff * NUDGE_FACTOR;
-            player.playbackRate = Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, rate));
+            player.playbackRate = Math.min(
+              MAX_PLAYBACK_RATE,
+              Math.max(MIN_PLAYBACK_RATE, 1 + diff * NUDGE_FACTOR)
+            );
           }
         }, SYNC_INTERVAL);
 
-        // keep authoritative state occasionally
+        // periodic authoritative state refresh
         setInterval(() => {
           socket.emit('getState', { roomId });
         }, SYNC_INTERVAL * 5);
 
         socket.on('syncState', s => {
           initState.currentTime = s.currentTime;
-          initState.lastUpdate = s.lastUpdate;
-          if (s.paused !== initState.paused) {
-            initState.paused = s.paused;
-            s.paused ? player.pause() : player.play();
+          initState.paused      = s.paused;
+          initState.lastUpdate  = s.lastUpdate;
+          if (s.paused !== player.paused) {
+            if (s.paused) {
+              suppressPause = true;
+              player.pause();
+            } else {
+              suppressPlay = true;
+              player.play();
+            }
           }
         });
       }
