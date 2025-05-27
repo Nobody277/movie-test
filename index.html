@@ -9,425 +9,278 @@
   <meta property="og:image" content="https://github.com/Nobody277/movie-night/blob/main/MovieNight.png" />
   <link rel="preconnect" href="https://fonts.gstatic.com" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
-    rel="stylesheet"
-  />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://cdn.socket.io/4.7.1/socket.io.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
-      --bg-gradient: linear-gradient(135deg,#000,#2e003e);
+      --bg: linear-gradient(135deg,#000,#2e003e);
       --fg: #e0e0e0;
-      --accent: #9b00ff;
-      --input-bg: #1a1a1a;
-      --input-border: #3e003f;
-      --card-shadow: rgba(0,0,0,0.7);
+      --accent:#9b00ff;
+      --in-bg:#1a1a1a;
+      --in-border:#3e003f;
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; padding: 0;
-      font-family: 'Roboto', sans-serif;
-      background: var(--bg-gradient);
-      color: var(--fg);
-      display: flex; height: 100vh; overflow: hidden;
-    }
-    #mainContent { display: flex; flex: 1; }
-    #videoSection {
-      flex: 2; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 1rem;
+      margin:0; padding:0;
+      font-family:'Roboto',sans-serif;
+      background:var(--bg);
+      color:var(--fg);
+      display:flex; height:100vh; overflow:hidden;
     }
     #videoContainer {
-      width: 100%; max-width: 900px;
-      box-shadow: 0 4px 16px var(--card-shadow);
-      border-radius: 8px; overflow: hidden;
+      flex:2; display:flex; align-items:center; justify-content:center;
+      background:#000;
     }
     #videoPlayer {
-      width: 100%; height: auto; background: #000;
+      width:100%; max-width:900px; border-radius:8px;
     }
-    #controls {
-      margin-top: 1rem; display: flex; gap: .5rem;
-    }
-    #videoURL {
-      flex: 1; max-width: 600px;
-      padding: .6rem 1rem; font-size: 1rem;
-      border: 1px solid var(--input-border);
-      border-radius: 6px; background: var(--input-bg);
-      color: var(--fg);
-    }
-    button {
-      font-size: 1rem; border: none; border-radius: 6px;
-      background: var(--accent); color: #fff;
-      cursor: pointer; transition: transform .2s;
-      padding: .6rem 1.2rem;
-    }
-    button:hover { transform: scale(1.05); }
-
     #chatSidebar {
-      flex: 1; max-width: 350px; background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(8px);
-      display: flex; flex-direction: column;
-      animation: slideIn 1s ease forwards;
+      flex:1; max-width:350px; background:rgba(0,0,0,0.5);
+      backdrop-filter:blur(8px); display:flex; flex-direction:column;
+      animation:slideIn .5s ease forwards;
     }
     #chatHeader {
-      padding: 1rem; font-size: 1.2rem;
-      border-bottom: 1px solid var(--input-border);
-      display: flex; justify-content: space-between;
+      padding:1rem; font-size:1.2rem;
+      border-bottom:1px solid var(--in-border);
+      display:flex; justify-content:space-between;
     }
-    #usernameDisplay { font-weight: 500; }
+    #usernameDisplay { font-weight:500; }
     #statsPanel {
-      padding: 1rem;
-      border-bottom: 1px solid var(--input-border);
+      padding:1rem; border-bottom:1px solid var(--in-border);
     }
-    #statsPanel h3 {
-      margin: 0 0 .5rem;
-      font-size: 1rem;
-    }
+    #statsPanel h3 { margin:0 0 .5rem; font-size:1rem; }
     #statsList {
-      list-style: none;
-      margin: 0; padding: 0;
-      max-height: 120px;
-      overflow-y: auto;
-      font-size: .9rem;
+      list-style:none; margin:0; padding:0;
+      max-height:120px; overflow-y:auto; font-size:.9rem;
     }
-    #statsList li {
-      margin-bottom: .25rem;
-    }
+    #statsList li { margin-bottom:.25rem; }
     #chatMessages {
-      flex: 1; overflow-y: auto; padding: 1rem;
-      display: flex; flex-direction: column; gap: .75rem;
+      flex:1; overflow-y:auto; padding:1rem;
+      display:flex; flex-direction:column; gap:.75rem;
     }
     .chatMessage {
-      padding: .5rem .75rem; background: rgba(255,255,255,0.1);
-      border-radius: 6px; max-width: 80%; animation: fadeIn .5s ease;
+      padding:.5rem .75rem; background:rgba(255,255,255,0.1);
+      border-radius:6px; max-width:80%; animation:fadeIn .3s ease;
     }
-    .chatMessage .user { font-weight: 500; margin-right: .5rem; }
-
+    .chatMessage .user { font-weight:500; margin-right:.5rem; }
     #chatInputContainer {
-      display: flex; padding: .75rem;
-      border-top: 1px solid var(--input-border);
+      display:flex; padding:.75rem; border-top:1px solid var(--in-border);
     }
     #chatInput {
-      flex: 1; padding: .5rem .75rem;
-      border: 1px solid var(--input-border);
-      border-radius: 6px; background: var(--input-bg);
-      color: var(--fg);
+      flex:1; padding:.5rem .75rem;
+      border:1px solid var(--in-border);
+      border-radius:6px; background:var(--in-bg);
+      color:var(--fg);
     }
-
-    .modal {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7);
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none;
-      transition: opacity .3s ease;
+    button {
+      margin-left:.5rem; padding:.6rem 1.2rem;
+      background:var(--accent); color:#fff;
+      border:none; border-radius:6px; cursor:pointer;
     }
-    .modal.visible { opacity: 1; pointer-events: auto; }
-    .modalBox {
-      background: #1a1a1a; border-radius: 8px;
-      padding: 1.5rem; max-width: 400px; width: 90%;
-      box-shadow: 0 4px 16px var(--card-shadow);
-      display: flex; flex-direction: column; gap: 1rem;
-    }
-    .modalHeader { font-size: 1.25rem; }
-    .modalBox input {
-      width: 100%; padding: .6rem 1rem;
-      border: 1px solid var(--input-border);
-      border-radius: 6px; background: var(--input-bg);
-      color: var(--fg);
-    }
-    .modalActions {
-      display: flex; justify-content: flex-end; gap: .5rem;
-    }
-
     @keyframes slideIn {
-      from { transform: translateX(100%); }
-      to   { transform: translateX(0); }
+      from{transform:translateX(100%);}to{transform:translateX(0);}
     }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
+      from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}
     }
   </style>
 </head>
 <body>
-  <div id="mainContent">
-    <section id="videoSection">
-      <div id="videoContainer">
-        <video id="videoPlayer" controls playsinline webkit-playsinline></video>
-      </div>
-      <div id="controls">
-        <input id="videoURL" placeholder="Paste URL…" />
-        <button id="loadBtn">Load Video</button>
-        <button id="createRoom">Create Room</button>
-      </div>
-    </section>
-
-    <aside id="chatSidebar">
-      <div id="chatHeader">
-        <span>Chat</span>
-        <span id="usernameDisplay"></span>
-      </div>
-      <div id="statsPanel">
-        <h3>Participants</h3>
-        <ul id="statsList"></ul>
-      </div>
-      <div id="chatMessages"></div>
-      <div id="chatInputContainer">
-        <input id="chatInput" placeholder="Type a message…" />
-        <button id="sendBtn">Send</button>
-      </div>
-    </aside>
+  <div id="videoContainer">
+    <video id="videoPlayer" controls playsinline webkit-playsinline></video>
   </div>
 
-  <div id="shareModal" class="modal">
-    <div class="modalBox">
-      <div class="modalHeader">Room Link</div>
-      <input id="shareURL" readonly />
-      <div class="modalActions">
-        <button id="copyBtn">Copy</button>
-        <button id="closeModal">Close</button>
-      </div>
+  <aside id="chatSidebar">
+    <div id="chatHeader">
+      <span>Chat</span>
+      <span id="usernameDisplay"></span>
     </div>
-  </div>
+    <div id="statsPanel">
+      <h3>Participants</h3>
+      <ul id="statsList"></ul>
+    </div>
+    <div id="chatMessages"></div>
+    <div id="chatInputContainer">
+      <input id="chatInput" placeholder="Type a message…" />
+      <button id="sendBtn">Send</button>
+    </div>
+  </aside>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
-      const FRONTEND_LINK     = `${location.origin}${location.pathname}`;
-      const socket            = io(SOCKET_SERVER_URL);
-      const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
+      const socket = io();
+      const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-      // assign a random Guest #n
-      const guestNum = Math.floor(Math.random() * 1000) + 1;
-      const username = `Guest #${guestNum}`;
+      // random Guest #n
+      const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
       document.getElementById('usernameDisplay').textContent = username;
 
-      // sync params
-      const SYNC_INTERVAL  = 1000;
-      const HARD_THRESHOLD = 1.0;
-      const NUDGE_FACTOR   = 0.1;
-      const MIN_RATE       = 0.95;
-      const MAX_RATE       = 1.05;
+      // sync settings
+      const SYNC_INTERVAL=1000, HARD_THRESHOLD=1.0, NUDGE=0.1,
+            MIN_RATE=0.95, MAX_RATE=1.05;
 
-      let hls, currentSource = '';
-      let latency = 0, initState = null;
-      let suppressSeek = false, suppressPlay = false, suppressPause = false;
+      let hls, currentSrc='', latency=0, initState=null;
+      let supSeek=false, supPlay=false, supPause=false;
 
       // UI refs
-      const player     = document.getElementById('videoPlayer');
-      const loadBtn    = document.getElementById('loadBtn');
-      const createBtn  = document.getElementById('createRoom');
-      const videoURLIn = document.getElementById('videoURL');
-      const chatMsgs   = document.getElementById('chatMessages');
-      const chatInput  = document.getElementById('chatInput');
-      const sendBtn    = document.getElementById('sendBtn');
-      const statsList  = document.getElementById('statsList');
+      const player = document.getElementById('videoPlayer');
+      const statsList = document.getElementById('statsList');
+      const chatMsgs = document.getElementById('chatMessages');
+      const chatInput = document.getElementById('chatInput');
+      const sendBtn = document.getElementById('sendBtn');
 
       const params = new URLSearchParams(location.search);
-      const inRoom = params.has('room'), roomId = params.get('room');
+      const roomId = params.get('room');
+      if (!roomId) {
+        chatMsgs.innerHTML = '<em>No room specified.</em>';
+        return;
+      }
+      socket.emit('joinRoom', { roomId, username });
 
-      function loadVideo(url) {
-        if (hls) { hls.destroy(); hls = null; }
-        player.src = '';
-        if (url.endsWith('.m3u8') && Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(url);
-          hls.attachMedia(player);
-        } else {
-          player.src = url;
-        }
+      // latency ping/pong
+      function ping() {
+        const t0=Date.now();
+        socket.emit('pingCheck',{clientTime:t0});
+      }
+      socket.on('pongCheck',({clientTime})=>{
+        latency=(Date.now()-clientTime)/2;
+      });
+
+      // chat helpers
+      function appendMsg(user,text){
+        const d=document.createElement('div');
+        d.className='chatMessage';
+        d.innerHTML=`<span class="user">${user}:</span> ${text}`;
+        chatMsgs.append(d);
+        chatMsgs.scrollTop=chatMsgs.scrollHeight;
+      }
+      function fmtTime(s){
+        const m=Math.floor(s/60), sec=Math.floor(s%60).toString().padStart(2,'0');
+        return `${m}:${sec}`;
       }
 
-      function measureLatency() {
-        const t0 = Date.now();
-        socket.emit('pingCheck', { clientTime: t0 });
-      }
-      socket.on('pongCheck', ({ clientTime }) => {
-        latency = (Date.now() - clientTime) / 2;
+      // outgoing chat
+      sendBtn.addEventListener('click',()=>{
+        const t=chatInput.value.trim();
+        if(!t) return;
+        appendMsg(username,t);
+        socket.emit('chat',{roomId,msg:t,username});
+        chatInput.value='';
       });
+      socket.on('chat',data=>appendMsg(data.username,data.msg));
 
-      loadBtn.addEventListener('click', () => {
-        const url = videoURLIn.value.trim();
-        if (!url) return;
-        currentSource = url;
-        loadVideo(url);
-        player.play().catch(()=>{});
-      });
-
-      createBtn.addEventListener('click', async () => {
-        const src = currentSource || videoURLIn.value.trim();
-        if (!src) return;
-        const res = await fetch(`${SOCKET_SERVER_URL}/rooms`, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({videoUrl: src})
-        });
-        const { roomId } = await res.json();
-        document.getElementById('shareURL').value = `${FRONTEND_LINK}?room=${roomId}`;
-        document.getElementById('shareModal').classList.add('visible');
-      });
-
-      document.getElementById('copyBtn').addEventListener('click', ()=>{
-        const box = document.getElementById('shareURL');
-        box.select(); document.execCommand('copy');
-      });
-      document.getElementById('closeModal').addEventListener('click', ()=>{
-        document.getElementById('shareModal').classList.remove('visible');
-      });
-
-      function safeEmit(evt, data) {
-        socket.emit(evt, data);
-      }
-      function appendMessage(user, text) {
-        const el = document.createElement('div');
-        el.className = 'chatMessage';
-        el.innerHTML = `<span class="user">${user}:</span> ${text}`;
-        chatMsgs.append(el);
-        chatMsgs.scrollTop = chatMsgs.scrollHeight;
-      }
-      function formatTime(s) {
-        const m = Math.floor(s/60), sec = Math.floor(s%60);
-        return `${m}:${sec.toString().padStart(2,'0')}`;
-      }
-
-      sendBtn.addEventListener('click', ()=>{
-        const msg = chatInput.value.trim();
-        if (!msg) return;
-        appendMessage(username, msg);
-        socket.emit('chat', {roomId, msg, username});
-        chatInput.value = '';
-      });
-
-      socket.on('chat', data => appendMessage(data.username, data.msg));
-
-      // stats panel
-      socket.on('stats', participants => {
-        statsList.innerHTML = '';
-        participants.forEach(p => {
-          const li = document.createElement('li');
-          li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${formatTime(p.time)}`;
+      // stats
+      socket.on('stats',arr=>{
+        statsList.innerHTML='';
+        arr.forEach(p=>{
+          const li=document.createElement('li');
+          li.textContent=`${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${fmtTime(p.time)}`;
           statsList.append(li);
         });
       });
 
-      if (inRoom) {
-        createBtn.style.display = 'none';
-        socket.emit('joinRoom', {roomId, username});
-      }
-
-      socket.on('init', state => {
-        initState = state;
-        if (state.videoUrl !== currentSource) {
-          currentSource = state.videoUrl;
-          loadVideo(state.videoUrl);
-        }
-
-        measureLatency();
-        player.pause();
-
-        player.addEventListener('canplay', ()=>{
-          const now     = Date.now();
-          const elapsed = (now - initState.lastUpdate - latency)/1000;
-          const target  = initState.currentTime + (initState.paused?0:elapsed);
-
-          suppressSeek = true;
-          player.currentTime = target;
-          if (initState.paused) {
-            suppressPause = true; player.pause();
+      // init state
+      socket.on('init',state=>{
+        initState=state;
+        if(state.videoUrl!==currentSrc){
+          currentSrc=state.videoUrl;
+          if(hls){ hls.destroy(); hls=null; }
+          if(currentSrc.endsWith('.m3u8') && Hls.isSupported()){
+            hls=new Hls();
+            hls.loadSource(currentSrc);
+            hls.attachMedia(player);
           } else {
-            suppressPlay = true; player.play();
+            player.src=currentSrc;
           }
-
-          setupSync();
-          startSmoothSync();
-
-          // report stats every second
+        }
+        ping();
+        player.pause();
+        player.addEventListener('canplay',()=>{
+          const now=Date.now();
+          const elapsed=(now - initState.lastUpdate - latency)/1000;
+          const target=initState.currentTime + (initState.paused?0:elapsed);
+          supSeek=true; player.currentTime=target;
+          if(initState.paused){ supPause=true; player.pause(); }
+          else          { supPlay=true;  player.play(); }
+          setupSync(); startSync();
           setInterval(()=>{
-            safeEmit('statsUpdate',{
+            socket.emit('statsUpdate',{
               username,
               latency,
-              time: player.currentTime,
+              time:player.currentTime,
               platform: isMobile?'mobile':'desktop'
             });
-          }, 1000);
-        }, {once:true});
+          },1000);
+        },{once:true});
       });
 
-      function setupSync() {
-        player.addEventListener('seeked', ()=>{
-          if (suppressSeek) { suppressSeek = false; return; }
-          initState.currentTime = player.currentTime;
-          initState.lastUpdate  = Date.now();
-          safeEmit('seek', {roomId, time: player.currentTime});
+      function setupSync(){
+        player.addEventListener('seeked',()=>{
+          if(supSeek){ supSeek=false; return; }
+          initState.currentTime=player.currentTime;
+          initState.lastUpdate=Date.now();
+          socket.emit('seek',{roomId,time:player.currentTime});
         });
-        player.addEventListener('play', ()=>{
-          if (suppressPlay) { suppressPlay = false; return; }
-          initState.currentTime = player.currentTime;
-          initState.lastUpdate  = Date.now();
-          initState.paused      = false;
-          safeEmit('play',{roomId, time: player.currentTime});
+        player.addEventListener('play',()=>{
+          if(supPlay){ supPlay=false; return; }
+          initState.currentTime=player.currentTime;
+          initState.lastUpdate=Date.now();
+          initState.paused=false;
+          socket.emit('play',{roomId,time:player.currentTime});
         });
-        player.addEventListener('pause', ()=>{
-          if (suppressPause) { suppressPause = false; return; }
-          initState.currentTime = player.currentTime;
-          initState.lastUpdate  = Date.now();
-          initState.paused      = true;
-          safeEmit('pause',{roomId, time: player.currentTime});
+        player.addEventListener('pause',()=>{
+          if(supPause){ supPause=false; return; }
+          initState.currentTime=player.currentTime;
+          initState.lastUpdate=Date.now();
+          initState.paused=true;
+          socket.emit('pause',{roomId,time:player.currentTime});
         });
 
-        socket.on('play', data => {
-          initState.currentTime = data.time;
-          initState.paused      = false;
-          initState.lastUpdate  = Date.now();
-          suppressPlay = true; player.play();
+        socket.on('play',d=>{
+          initState.currentTime=d.time;
+          initState.paused=false;
+          initState.lastUpdate=Date.now();
+          supPlay=true; player.play();
         });
-        socket.on('pause', data => {
-          initState.currentTime = data.time;
-          initState.paused      = true;
-          initState.lastUpdate  = Date.now();
-          suppressPause = true; player.pause();
+        socket.on('pause',d=>{
+          initState.currentTime=d.time;
+          initState.paused=true;
+          initState.lastUpdate=Date.now();
+          supPause=true; player.pause();
         });
-        socket.on('seek', data => {
-          initState.currentTime = data.time;
-          initState.lastUpdate  = Date.now();
-          suppressSeek = true; player.currentTime = data.time;
+        socket.on('seek',d=>{
+          initState.currentTime=d.time;
+          initState.lastUpdate=Date.now();
+          supSeek=true; player.currentTime=d.time;
         });
       }
 
-      function startSmoothSync() {
-        if (isMobile) return;
+      function startSync(){
+        if(isMobile) return;
         setInterval(()=>{
-          const now        = Date.now();
-          const elapsed    = (now - initState.lastUpdate - latency)/1000;
-          const serverTime = initState.currentTime + (initState.paused?0:elapsed);
-          const diff       = serverTime - player.currentTime;
-
-          if (Math.abs(diff) > HARD_THRESHOLD) {
-            suppressSeek = true;
-            player.currentTime = serverTime;
+          const now=Date.now();
+          const elapsed=(now - initState.lastUpdate - latency)/1000;
+          const serverTime=initState.currentTime + (initState.paused?0:elapsed);
+          const diff=serverTime - player.currentTime;
+          if(Math.abs(diff)>HARD_THRESHOLD){
+            supSeek=true; player.currentTime=serverTime;
           } else {
-            player.playbackRate = Math.min(
-              MAX_RATE, Math.max(MIN_RATE, 1 + diff*NUDGE_FACTOR)
+            player.playbackRate=Math.min(
+              MAX_RATE, Math.max(MIN_RATE,1+diff*NUDGE)
             );
           }
-        }, SYNC_INTERVAL);
+        },SYNC_INTERVAL);
 
-        setInterval(()=>{
-          socket.emit('getState',{roomId});
-        }, SYNC_INTERVAL*5);
+        setInterval(()=>{ socket.emit('getState',{roomId}); },SYNC_INTERVAL*5);
 
-        socket.on('syncState', s => {
-          initState.currentTime = s.currentTime;
-          initState.paused      = s.paused;
-          initState.lastUpdate  = s.lastUpdate;
-          if (s.paused !== player.paused) {
-            if (s.paused) {
-              suppressPause = true; player.pause();
-            } else {
-              suppressPlay = true; player.play();
-            }
+        socket.on('syncState',s=>{
+          initState.currentTime=s.currentTime;
+          initState.paused=s.paused;
+          initState.lastUpdate=s.lastUpdate;
+          if(s.paused !== player.paused){
+            if(s.paused){ supPause=true; player.pause(); }
+            else         { supPlay=true;  player.play(); }
           }
         });
       }
