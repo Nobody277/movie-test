@@ -23,13 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatMsgs  = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
   const sendBtn   = document.getElementById('sendBtn');
-  const collapseBtn = document.getElementById('collapseBtn');
-  const chatSidebar = document.getElementById('chatSidebar');
-
-  // Chat collapse handler
-  collapseBtn.addEventListener('click', () => {
-    chatSidebar.classList.toggle('collapsed');
-  });
 
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
