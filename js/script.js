@@ -18,21 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let supSeek = false, supPlay = false, supPause = false;
 
   // UI refs
-  const player     = document.getElementById('videoPlayer');
-  const airplayBtn = document.getElementById('airplayButton');
-  const statsList  = document.getElementById('statsList');
-  const chatMsgs   = document.getElementById('chatMessages');
-  const chatInput  = document.getElementById('chatInput');
-  const sendBtn    = document.getElementById('sendBtn');
-
-  if (player.webkitShowPlaybackTargetPicker && airplayBtn) {
-    player.addEventListener('webkitplaybacktargetavailabilitychanged', e => {
-      airplayBtn.hidden = e.availability !== 'available';
-    });
-    airplayBtn.addEventListener('click', () => {
-      player.webkitShowPlaybackTargetPicker();
-    });
-  }
+  const player    = document.getElementById('videoPlayer');
+  const statsList = document.getElementById('statsList');
+  const chatMsgs  = document.getElementById('chatMessages');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn   = document.getElementById('sendBtn');
 
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
@@ -86,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('init', state => {
+    // update title & og:title on client
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
