@@ -27,11 +27,39 @@ body {
   backdrop-filter:blur(8px);
   display:flex; flex-direction:column;
   animation:slideIn .5s ease forwards;
+  transition: max-width 0.3s ease;
+  position: relative;
+}
+#chatSidebar.collapsed {
+  max-width: 40px;
+}
+#chatSidebar.collapsed #chatHeader div,
+#chatSidebar.collapsed #chatMessages,
+#chatSidebar.collapsed #chatInputContainer,
+#chatSidebar.collapsed #statsPanel {
+  display: none;
+}
+#collapseBtn {
+  padding: 0.4rem;
+  margin: 0;
+  font-size: 1.2rem;
+  transition: transform 0.3s ease;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#chatSidebar.collapsed #collapseBtn {
+  transform: rotate(180deg);
 }
 #chatHeader {
-  padding:1rem; font-size:1.2rem;
-  border-bottom:1px solid var(--in-border);
-  display:flex; justify-content:space-between;
+  padding: 1rem;
+  font-size: 1.2rem;
+  border-bottom: 1px solid var(--in-border);
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
 #usernameDisplay { font-weight:500; }
 #statsPanel {
