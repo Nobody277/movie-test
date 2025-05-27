@@ -25,9 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput  = document.getElementById('chatInput');
   const sendBtn    = document.getElementById('sendBtn');
 
-  if ('webkitShowPlaybackTargetPicker' in player) {
+  if (player.webkitShowPlaybackTargetPicker && airplayBtn) {
     player.addEventListener('webkitplaybacktargetavailabilitychanged', e => {
-      airplayBtn.hidden = (e.availability !== 'available');
+      airplayBtn.hidden = e.availability !== 'available';
     });
     airplayBtn.addEventListener('click', () => {
       player.webkitShowPlaybackTargetPicker();

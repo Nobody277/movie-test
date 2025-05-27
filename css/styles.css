@@ -114,3 +114,15 @@ button {
   from { opacity:0; transform:translateY(10px); }
   to   { opacity:1; transform:translateY(0); }
 }
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #videoContainer { flex: none; height: 50vh; }
+  #chatSidebar {
+    flex: none;
+    width: 100%;
+    height: 50vh;
+    max-width: none;
+  }
+  #statsPanel { display: none; }
+  .chatMessage { font-size: .9rem; }
+}
