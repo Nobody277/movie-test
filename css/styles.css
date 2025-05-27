@@ -14,6 +14,23 @@ body {
   display:flex; height:100vh; overflow:hidden;
 }
 #videoContainer {
+  position: relative;
+}
+#airplayBtn {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(255,255,255,0.8);
+  border: none;
+  border-radius: 4px;
+  padding: .5rem .75rem;
+  cursor: pointer;
+  font-size: .9rem;
+}
+#airplayBtn[hidden] {
+  display: none;
+}
+#videoContainer {
   flex:2; display:flex;
   align-items:center; justify-content:center;
 }
