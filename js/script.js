@@ -66,6 +66,11 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('chat', { roomId, msg: t, username });
     chatInput.value = '';
   });
+  chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      sendBtn.click();
+    }
+  });
   socket.on('chat', data => appendMsg(data.username, data.msg));
 
   // stats
