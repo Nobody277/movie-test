@@ -1,88 +1,67 @@
-// script.js
+// public/js/script.js
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
   const socket = io(SOCKET_SERVER_URL);
   const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  const player = document.getElementById('videoPlayer');
-  const statsList = document.getElementById('statsList');
-  const chatMsgs = document.getElementById('chatMessages');
-  const chatInput = document.getElementById('chatInput');
-  const sendBtn = document.getElementById('sendBtn');
+  // DOM elements
+  const player       = document.getElementById('videoPlayer');
+  const statsList    = document.getElementById('statsList');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatInput    = document.getElementById('chatInput');
+  const sendBtn      = document.getElementById('sendBtn');
+  const usernameDisp = document.getElementById('usernameDisplay');
+
+  // Username & room
   const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
-  document.getElementById('usernameDisplay').textContent = username;
-
-  // Skip ±10s with arrow keys (unless focus is in chat)
-  document.addEventListener('keydown', (e) => {
-    if (document.activeElement === chatInput) return;
-    if (e.key === 'ArrowRight') {
-      player.currentTime = Math.min(player.duration, player.currentTime + 10);
-      e.preventDefault();
-    } else if (e.key === 'ArrowLeft') {
-      player.currentTime = Math.max(0, player.currentTime - 10);
-      e.preventDefault();
-    }
-  });
-
-  // Join room
-  const params = new URLSearchParams(location.search);
+  usernameDisp.textContent = username;
+  const params = new URLSearchParams(window.location.search);
   const roomId = params.get('room');
   if (!roomId) {
-    chatMsgs.innerHTML = '<em>No room specified.</em>';
+    chatMessages.innerHTML = '<em>No room specified.</em>';
     return;
   }
-  socket.emit('joinRoom', { roomId, username });
 
-  let latency = 0;
-  let roomState = null;
+  // State
+  let latency    = 0;
+  let roomState  = null;
+  const SYNC_INTERVAL          = 1000;
+  const STATE_REQUEST_INTERVAL = 5000;
+  const STATS_INTERVAL         = 1000;
 
-  // Latency measurement
-  function ping() {
+  // Helpers
+  const ping = () => {
     const t0 = Date.now();
     socket.emit('pingCheck', { clientTime: t0 });
-  }
+  };
+  const appendChatMessage = (user, msg) => {
+    const div = document.createElement('div');
+    div.className = 'chatMessage';
+    div.innerHTML = `<span class="user">${user}:</span> ${msg}`;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  };
+
+  // Socket handlers
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
   });
-
-  // Chat helpers
-  function appendMsg(user, text) {
-    const d = document.createElement('div');
-    d.className = 'chatMessage';
-    d.innerHTML = `<span class="user">${user}:</span> ${text}`;
-    chatMsgs.append(d);
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-  }
-
-  sendBtn.addEventListener('click', () => {
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    appendMsg(username, msg);
-    socket.emit('chat', { roomId, msg, username });
-    chatInput.value = '';
-  });
-  chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendBtn.click();
-  });
-  socket.on('chat', (data) => appendMsg(data.username, data.msg));
-
-  // Participants stats
-  socket.on('stats', (arr) => {
+  socket.on('chat', data => appendChatMessage(data.username, data.msg));
+  socket.on('stats', participants => {
     statsList.innerHTML = '';
-    arr.forEach((p) => {
-      const m = Math.floor(p.time / 60);
-      const s = String(Math.floor(p.time % 60)).padStart(2, '0');
+    participants.forEach(p => {
+      const mm = Math.floor(p.time / 60);
+      const ss = String(Math.floor(p.time % 60)).padStart(2, '0');
       const li = document.createElement('li');
-      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
-      statsList.append(li);
+      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${mm}:${ss}`;
+      statsList.appendChild(li);
     });
   });
 
-  // Receive initial state
-  socket.on('init', (state) => {
+  socket.on('init', state => {
     roomState = state;
 
-    // Update document title
+    // Update title & OG
     if (state.title) {
       const full = `Movie Night – ${state.title}`;
       document.title = full;
@@ -90,15 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // Load video or HLS
-    let hls = null;
+    // Load source (HLS vs MP4)
+    let hls       = null;
     let currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
+      if (hls) { hls.destroy(); hls = null; }
       if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
@@ -108,94 +84,118 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Synchronize playback
+    // Initial sync when ready
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
-      const now = Date.now();
+      const now     = Date.now();
       const elapsed = (now - roomState.lastUpdate - latency) / 1000;
-      const target = roomState.currentTime + (roomState.paused ? 0 : elapsed);
-      player.currentTime = target;
-      roomState.paused ? player.pause() : player.play();
+      const target  = roomState.currentTime + (roomState.paused ? 0 : elapsed);
 
-      setupUserEvents();
-      setupServerEvents();
-      startSyncLoop();
-      startStatsLoop();
+      player.currentTime = target;
+      state.paused ? player.pause() : player.play();
+
+      // User‑initiated events
+      player.addEventListener('seeked', e => {
+        if (!e.isTrusted) return;
+        socket.emit('seek', { roomId, time: player.currentTime });
+      });
+      player.addEventListener('play',   e => {
+        if (!e.isTrusted) return;
+        socket.emit('play', { roomId, time: player.currentTime });
+      });
+      player.addEventListener('pause',  e => {
+        if (!e.isTrusted) return;
+        socket.emit('pause', { roomId, time: player.currentTime });
+      });
+
+      // Server‑driven updates
+      socket.on('seek', data => {
+        roomState.currentTime = data.time;
+        roomState.lastUpdate  = Date.now();
+        player.currentTime    = data.time;
+      });
+      socket.on('play', data => {
+        roomState.currentTime = data.time;
+        roomState.paused      = false;
+        roomState.lastUpdate  = Date.now();
+        player.play();
+      });
+      socket.on('pause', data => {
+        roomState.currentTime = data.time;
+        roomState.paused      = true;
+        roomState.lastUpdate  = Date.now();
+        player.pause();
+      });
+
+      // Sync loop
+      setInterval(() => {
+        const now     = Date.now();
+        const elapsed = (now - roomState.lastUpdate - latency) / 1000;
+        const serverTime = roomState.currentTime + (roomState.paused ? 0 : elapsed);
+        const diff       = serverTime - player.currentTime;
+
+        if (Math.abs(diff) > 1) {
+          player.currentTime = serverTime;
+        } else {
+          player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
+        }
+      }, SYNC_INTERVAL);
+
+      // Periodic state request
+      setInterval(() => {
+        socket.emit('getState', { roomId });
+      }, STATE_REQUEST_INTERVAL);
+      socket.on('syncState', s => {
+        roomState.currentTime = s.currentTime;
+        roomState.paused      = s.paused;
+        roomState.lastUpdate  = s.lastUpdate;
+        if (s.paused !== player.paused) {
+          s.paused ? player.pause() : player.play();
+        }
+      });
+
+      // Stats reporting
+      setInterval(() => {
+        socket.emit('statsUpdate', {
+          username,
+          latency,
+          time: player.currentTime,
+          platform: isMobile ? 'mobile' : 'desktop'
+        });
+      }, STATS_INTERVAL);
+
     }, { once: true });
   });
 
-  function setupUserEvents() {
-    player.addEventListener('seeked', (e) => {
-      if (!e.isTrusted) return;
-      socket.emit('seek', { roomId, time: player.currentTime });
-    });
-    player.addEventListener('play', (e) => {
-      if (!e.isTrusted) return;
-      socket.emit('play', { roomId, time: player.currentTime });
-    });
-    player.addEventListener('pause', (e) => {
-      if (!e.isTrusted) return;
-      socket.emit('pause', { roomId, time: player.currentTime });
-    });
-  }
+  // Now that handlers are in place, join
+  socket.emit('joinRoom', { roomId, username });
 
-  function setupServerEvents() {
-    socket.on('seek', (data) => {
-      roomState.currentTime = data.time;
-      roomState.lastUpdate = Date.now();
-      player.currentTime = data.time;
-    });
-    socket.on('play', (data) => {
-      roomState.currentTime = data.time;
-      roomState.paused = false;
-      roomState.lastUpdate = Date.now();
-      player.play();
-    });
-    socket.on('pause', (data) => {
-      roomState.currentTime = data.time;
-      roomState.paused = true;
-      roomState.lastUpdate = Date.now();
-      player.pause();
-    });
-  }
+  // Chat input
+  sendBtn.addEventListener('click', () => {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    appendChatMessage(username, msg);
+    socket.emit('chat', { roomId, msg, username });
+    chatInput.value = '';
+  });
+  chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
 
-  function startSyncLoop() {
-    setInterval(() => {
-      const now = Date.now();
-      const elapsed = (now - roomState.lastUpdate - latency) / 1000;
-      const serverTime = roomState.currentTime + (roomState.paused ? 0 : elapsed);
-      const diff = serverTime - player.currentTime;
-
-      if (Math.abs(diff) > 1.0) {
-        player.currentTime = serverTime;
-      } else {
-        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
-      }
-    }, 1000);
-
-    setInterval(() => {
-      socket.emit('getState', { roomId });
-    }, 5000);
-
-    socket.on('syncState', (s) => {
-      roomState.currentTime = s.currentTime;
-      roomState.paused      = s.paused;
-      roomState.lastUpdate  = s.lastUpdate;
-      if (s.paused !== player.paused) {
-        s.paused ? player.pause() : player.play();
-      }
-    });
-  }
-
-  function startStatsLoop() {
-    setInterval(() => {
-      socket.emit('statsUpdate', {
-        username,
-        latency,
-        time: player.currentTime,
-        platform: isMobile ? 'mobile' : 'desktop'
-      });
-    }, 1000);
-  }
+  // ←→ Arrow keys: skip ±10s and sync immediately
+  document.addEventListener('keydown', e => {
+    if (document.activeElement === chatInput) return;
+    let newTime = null;
+    if (e.key === 'ArrowRight') {
+      newTime = Math.min(player.duration, player.currentTime + 10);
+    } else if (e.key === 'ArrowLeft') {
+      newTime = Math.max(0, player.currentTime - 10);
+    }
+    if (newTime !== null) {
+      player.currentTime = newTime;
+      socket.emit('seek', { roomId, time: newTime });
+      e.preventDefault();
+    }
+  });
 });

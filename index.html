@@ -1,13 +1,13 @@
-<!-- index.html -->
+<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Movie Night</title>
-  <meta property="og:title" content="Movie Night" />
+  <meta property="og:title"       content="Movie Night" />
   <meta property="og:description" content="Watch movies or shows with friends you don't have!" />
-  <meta property="og:image" content="https://raw.githubusercontent.com/Nobody277/movie-night/main/Movie%20Night.png" />
+  <meta property="og:image"       content="https://raw.githubusercontent.com/Nobody277/movie-night/main/Movie%20Night.png" />
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -20,8 +20,8 @@
       controls
       playsinline
       webkit-playsinline
-      x-webkit-airplay="allow"
-    ></video>
+      x-webkit-airplay="allow">
+    </video>
   </div>
 
   <aside id="chatSidebar">
@@ -38,7 +38,7 @@
     <div id="chatMessages"></div>
 
     <div id="chatInputContainer">
-      <input id="chatInput" placeholder="Type a message…" />
+      <input id="chatInput" placeholder="Type a message…" autocomplete="off" />
       <button id="sendBtn">Send</button>
     </div>
   </aside>
