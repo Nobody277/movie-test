@@ -63,11 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  let initState;
-
+  // once we get the initial state from the server...
   socket.on('init', state => {
-    initState = { ...state };
-
     // update title immediately
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
