@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chatInput');
   const sendBtn   = document.getElementById('sendBtn');
 
-  // 1) Generate Guest username
+  // 1) Guest username
   const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
   document.getElementById('usernameDisplay').textContent = username;
 
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // 3) Latency helper
+  // 3) Latency ping/pong
   let latency = 0;
   function ping() {
     const t0 = Date.now();
@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     latency = (Date.now() - clientTime) / 2;
   });
 
-  // 4) Chat helpers
+  // 4) Chat
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -43,34 +43,33 @@ document.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', () => {
     const msg = chatInput.value.trim();
     if (!msg) return;
-    appendMsg(username,msg);
-    socket.emit('chat',{ roomId, msg, username });
+    appendMsg(username, msg);
+    socket.emit('chat', { roomId, msg, username });
     chatInput.value = '';
   });
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') sendBtn.click();
   });
-  socket.on('chat', data => appendMsg(data.username,data.msg));
+  socket.on('chat', data => appendMsg(data.username, data.msg));
 
-  // 5) Stats panel
+  // 5) Stats
   socket.on('stats', arr => {
     statsList.innerHTML = '';
     arr.forEach(p => {
       const m = Math.floor(p.time/60),
             s = String(Math.floor(p.time%60)).padStart(2,'0');
       const li = document.createElement('li');
-      li.textContent = 
-        `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
+      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
     });
   });
 
-  // 6) Handle initial state
+  // 6) Receive initial state
   let initState = null;
   socket.on('init', state => {
     initState = state;
 
-    // a) Update titles
+    // update title
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -78,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // b) Load video (HLS or direct)
+    // load or HLS
     let hls, currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
@@ -92,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // c) Sync to the server’s time baseline
+    // sync to baseline
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
@@ -109,51 +108,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { once: true });
   });
 
-  // 7) User → Server events **and** update local state
+  // 7) User events (and update local state)
   function bindUserEvents() {
+    // Seek
     player.addEventListener('seeked', e => {
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
       initState.lastUpdate  = Date.now();
-      socket.emit('seek',{ roomId, time: player.currentTime });
+      socket.emit('seek', { roomId, time: player.currentTime });
     });
+    // Play
     player.addEventListener('play', e => {
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
       initState.lastUpdate  = Date.now();
       initState.paused      = false;
-      socket.emit('play',{ roomId, time: player.currentTime });
+      socket.emit('play', { roomId, time: player.currentTime });
     });
+    // Pause
     player.addEventListener('pause', e => {
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
       initState.lastUpdate  = Date.now();
       initState.paused      = true;
-      socket.emit('pause',{ roomId, time: player.currentTime });
+      socket.emit('pause', { roomId, time: player.currentTime });
     });
 
-    // arrow‑key skipping
     document.addEventListener('keydown', e => {
+      if (isMobile) return;
       if (document.activeElement === chatInput) return;
+
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        player.currentTime = Math.max(0, player.currentTime - 10);
-        // update & emit
+        player.currentTime = Math.max(0, player.currentTime - 5);
         initState.currentTime = player.currentTime;
-        initState.lastUpdate = Date.now();
-        socket.emit('seek',{ roomId, time: player.currentTime });
+        initState.lastUpdate  = Date.now();
+        socket.emit('seek', { roomId, time: player.currentTime });
       }
-      if (e.key === 'ArrowRight') {
+      else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        player.currentTime = Math.min(player.duration, player.currentTime + 10);
+        player.currentTime = Math.min(player.duration, player.currentTime + 5);
         initState.currentTime = player.currentTime;
-        initState.lastUpdate = Date.now();
-        socket.emit('seek',{ roomId, time: player.currentTime });
+        initState.lastUpdate  = Date.now();
+        socket.emit('seek', { roomId, time: player.currentTime });
       }
     });
   }
 
-  // 8) Server → User events
+  // 8) Remote events
   function bindRemoteEvents() {
     socket.on('seek', data => {
       initState.currentTime = data.time;
@@ -174,25 +176,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 9) Sync loop (desktop only)
+  // 9) Sync loop (desktop)
   function startSyncLoop() {
     setInterval(() => {
       const now = Date.now();
-      const elapsed = (now - initState.lastUpdate - latency) / 1000;
+      const elapsed    = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-      const diff = serverTime - player.currentTime;
+      const diff       = serverTime - player.currentTime;
 
       if (Math.abs(diff) > 1.0) {
         player.currentTime = serverTime;
       } else {
-        player.playbackRate = Math.min(
-          1.05,
-          Math.max(0.95, 1 + diff * 0.1)
-        );
+        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
       }
     }, 1000);
 
-    setInterval(() => socket.emit('getState',{ roomId }), 5000);
+    setInterval(() => socket.emit('getState', { roomId }), 5000);
     socket.on('syncState', s => {
       initState.currentTime = s.currentTime;
       initState.paused      = s.paused;
@@ -201,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10) Stats loop (all clients)
+  // 10) Stats loop
   function startStatsLoop() {
     setInterval(() => {
       socket.emit('statsUpdate', {
