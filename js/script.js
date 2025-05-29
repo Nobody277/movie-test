@@ -9,8 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chatInput');
   const sendBtn   = document.getElementById('sendBtn');
 
+  // state & timing
+  let initState         = { currentTime: 0, paused: true, lastUpdate: Date.now(), videoUrl: '' };
+  let latency           = 0;
+  let syncIntervalId    = null;
+  let stateSyncInterval = null;
+  let statsIntervalId   = null;
+  let hls               = null;
+  let currentSrc        = '';
+
   // generate a Guest username
-  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
+  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
   document.getElementById('usernameDisplay').textContent = username;
 
   // join the room
@@ -22,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // helper: ping/pong for latency
+  // ping/pong latency check
   function ping() {
     const t0 = Date.now();
     socket.emit('pingCheck', { clientTime: t0 });
@@ -55,17 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('stats', arr => {
     statsList.innerHTML = '';
     arr.forEach(p => {
-      const m = Math.floor(p.time/60),
-            s = String(Math.floor(p.time%60)).padStart(2,'0');
+      const m = Math.floor(p.time / 60);
+      const s = String(Math.floor(p.time % 60)).padStart(2, '0');
       const li = document.createElement('li');
       li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
     });
   });
 
-  // once we get the initial state from the server...
+  // handle initial state from server
   socket.on('init', state => {
-    // update title immediately
+    initState = { ...state };
+
+    // update title/meta
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -74,10 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // load or HLS-attach the stream
-    let hls, currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
-      if (hls) { hls.destroy(); hls = null; }
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
       if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
@@ -87,24 +100,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // sync the time
+    // initial sync once video can play
     ping();
     player.pause();
-    player.addEventListener('canplay', () => {
+    const onCanPlay = () => {
       const now     = Date.now();
-      const elapsed = (now - state.lastUpdate - latency) / 1000;
-      const target  = state.currentTime + (state.paused ? 0 : elapsed);
+      const elapsed = (now - initState.lastUpdate - latency) / 1000;
+      const target  = initState.currentTime + (initState.paused ? 0 : elapsed);
       player.currentTime = target;
-      state.paused ? player.pause() : player.play();
+      initState.paused ? player.pause() : player.play();
 
       setupUserEvents();
-      setupRemoteEvents(state);
+      setupRemoteEvents();
       startSyncLoop();
       startStatsLoop();
-    }, { once: true });
+
+      player.removeEventListener('canplay', onCanPlay);
+    };
+    player.addEventListener('canplay', onCanPlay, { once: true });
   });
 
-  // user ↔ server event wiring
+  // user → server controls
   function setupUserEvents() {
     player.addEventListener('seeked', e => {
       if (!e.isTrusted) return;
@@ -120,54 +136,65 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function setupRemoteEvents(state) {
-    socket.on('seek', data => {
-      state.currentTime = data.time;
-      state.lastUpdate = Date.now();
-      player.currentTime = data.time;
+  // server → user controls
+  function setupRemoteEvents() {
+    socket.off('seek').on('seek', data => {
+      initState.currentTime = data.time;
+      initState.lastUpdate  = Date.now();
+      player.currentTime    = data.time;
     });
-    socket.on('play', data => {
-      state.currentTime = data.time;
-      state.paused = false;
-      state.lastUpdate = Date.now();
+    socket.off('play').on('play', data => {
+      initState.currentTime = data.time;
+      initState.paused      = false;
+      initState.lastUpdate  = Date.now();
       player.play();
     });
-    socket.on('pause', data => {
-      state.currentTime = data.time;
-      state.paused = true;
-      state.lastUpdate = Date.now();
+    socket.off('pause').on('pause', data => {
+      initState.currentTime = data.time;
+      initState.paused      = true;
+      initState.lastUpdate  = Date.now();
       player.pause();
     });
   }
 
   // authoritative sync loop
   function startSyncLoop() {
-    setInterval(() => {
-      const now = Date.now();
+    // clear any existing loops
+    if (syncIntervalId)    clearInterval(syncIntervalId);
+    if (stateSyncInterval) clearInterval(stateSyncInterval);
+
+    syncIntervalId = setInterval(() => {
+      const now     = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-      const diff = serverTime - player.currentTime;
-      if (Math.abs(diff) > 1.0) {
+      const diff   = serverTime - player.currentTime;
+
+      if (Math.abs(diff) > 0.5) {
         player.currentTime = serverTime;
+        player.playbackRate = 1;
       } else {
         player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
       }
     }, 1000);
 
-    setInterval(() => socket.emit('getState', { roomId }), 5000);
-    socket.on('syncState', s => {
+    stateSyncInterval = setInterval(() => {
+      socket.emit('getState', { roomId });
+    }, 5000);
+
+    socket.off('syncState').on('syncState', s => {
       initState.currentTime = s.currentTime;
       initState.paused      = s.paused;
       initState.lastUpdate  = s.lastUpdate;
-      if (s.paused !== player.paused) {
-        s.paused ? player.pause() : player.play();
-      }
+
+      if (s.paused && !player.paused) player.pause();
+      else if (!s.paused && player.paused) player.play();
     });
   }
 
-  // send stats every second
+  // periodic stats reporting
   function startStatsLoop() {
-    setInterval(() => {
+    if (statsIntervalId) clearInterval(statsIntervalId);
+    statsIntervalId = setInterval(() => {
       socket.emit('statsUpdate', {
         username,
         latency,
