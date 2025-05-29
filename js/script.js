@@ -1,9 +1,10 @@
+// public/js/script.js
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
   const socket            = io(SOCKET_SERVER_URL);
   const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  // UI elements
+  // UI refs
   const player       = document.getElementById('videoPlayer');
   const statsList    = document.getElementById('statsList');
   const chatMsgs     = document.getElementById('chatMessages');
@@ -11,8 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendBtn      = document.getElementById('sendBtn');
   const usernameDisp = document.getElementById('usernameDisplay');
 
-  // 1) Assign a random Guest username
-  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
+  // 1) Pick a random Guest name
+  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
   usernameDisp.textContent = username;
 
   // 2) Join the room
@@ -24,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // 3) Latency measurement
+  // 3) Ping–pong for latency
   let latency = 0;
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
@@ -53,31 +54,31 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   socket.on('chat', data => appendMsg(data.username, data.msg));
 
-  // 5) Stats & gated sync
+  // 5) Stats + gated sync
   let syncing = false;
   socket.on('stats', list => {
     statsList.innerHTML = '';
     list.forEach(p => {
-      const m  = Math.floor(p.time / 60),
-            s  = String(Math.floor(p.time % 60)).padStart(2, '0'),
+      const m  = Math.floor(p.time/60),
+            s  = String(Math.floor(p.time%60)).padStart(2,'0'),
             li = document.createElement('li');
       li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
     });
 
-    // Only start desktop sync when we have >1 viewer and state ready
+    // Only start desktop sync when we have >1 viewer **and** initState is set
     if (!isMobile && initState && list.length > 1 && !syncing) {
       syncing = true;
       startSyncLoop();
     }
   });
 
-  // 6) Handle initial server state
+  // 6) Receive the room’s initial state
   let initState = null;
   socket.on('init', state => {
     initState = state;
 
-    // Update title/OG
+    // a) Update page title & OpenGraph
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -85,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // Load or HLS‑attach video
+    // b) Load or HLS‑attach
     let hls, currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
@@ -99,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Seek/play to correct baseline
+    // c) Jump to the right spot
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
@@ -113,20 +114,22 @@ document.addEventListener('DOMContentLoaded', () => {
       bindUserEvents();
       bindRemoteEvents();
       startStatsLoop();
-      // Sync loop will auto‑start once stats>1
+      // startSyncLoop() will fire later, once stats>1
     }, { once: true });
   });
 
-  // 7) User‑driven events, with suppress flag for programmatic seeks
+  // 7) User‑driven events (with explicit suppress for programmatic seeks)
   let suppressSeek = false;
   function bindUserEvents() {
     player.addEventListener('seeked', e => {
       if (suppressSeek) { suppressSeek = false; return; }
+      // only real user scrubs here
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
-      initState.lastUpdate = Date.now();
+      initState.lastUpdate  = Date.now();
       socket.emit('seek', { roomId, time: player.currentTime });
     });
+
     player.addEventListener('play', e => {
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
@@ -134,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
       initState.paused      = false;
       socket.emit('play', { roomId, time: player.currentTime });
     });
+
     player.addEventListener('pause', e => {
       if (!e.isTrusted) return;
       initState.currentTime = player.currentTime;
@@ -142,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
       socket.emit('pause', { roomId, time: player.currentTime });
     });
 
-    // Desktop arrow‑key skip ±5 sec (capture phase)
+    // Desktop arrow‑key ±5 sec override (capture phase)
     window.addEventListener('keydown', e => {
       if (isMobile) return;
       if (document.activeElement === chatInput) return;
@@ -150,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const delta = e.key === 'ArrowLeft' ? -5 : +5;
         player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + delta));
+
         initState.currentTime = player.currentTime;
         initState.lastUpdate  = Date.now();
         socket.emit('seek', { roomId, time: player.currentTime });
@@ -157,14 +162,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { capture: true });
   }
 
-  // 8) Remote updates from peers
+  // 8) Remote events from your peers
   function bindRemoteEvents() {
     socket.on('seek', data => {
       initState.currentTime = data.time;
       initState.lastUpdate  = Date.now();
-      // programmatic seek—suppress our own handler
-      suppressSeek = true;
-      player.currentTime    = data.time;
+      // suppress our own handler, then seek
+      suppressSeek      = true;
+      player.currentTime = data.time;
     });
     socket.on('play', data => {
       initState.currentTime = data.time;
@@ -180,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 9) Smooth‑sync loop (desktop only)
+  // 9) Smooth‑sync loop (desktop only, fires once stats>1)
   function startSyncLoop() {
     const SYNC_INTERVAL  = 1000;
     const HARD_THRESHOLD = 1.0;
@@ -199,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         suppressSeek = true;
         player.currentTime = serverTime;
       } else {
+        // gentle playbackRate nudge
         player.playbackRate = Math.min(
           MAX_RATE,
           Math.max(MIN_RATE, 1 + diff * NUDGE_FACTOR)
@@ -206,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, SYNC_INTERVAL);
 
-    // Periodic authoritative pull
+    // periodic authoritative pull
     setInterval(() => {
       socket.emit('getState', { roomId });
     }, SYNC_INTERVAL * 5);
@@ -219,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10) Broadcast our stats every second
+  // 10) Keep your stats alive
   function startStatsLoop() {
     setInterval(() => {
       socket.emit('statsUpdate', {
