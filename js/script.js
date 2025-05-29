@@ -1,33 +1,30 @@
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
   const socket            = io(SOCKET_SERVER_URL);
-  let initState;    // will hold the authoritative room state
-  let latency = 0;  // measured ping/2
+  const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
+  let initState           = null;
+  let latency             = 0;
 
-  const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
   const player    = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
   const chatMsgs  = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
   const sendBtn   = document.getElementById('sendBtn');
-  document.getElementById('usernameDisplay').textContent = `Guest #${Math.floor(Math.random()*1000)+1}`;
 
-  // figure out which room we’re in
+  // generate a Guest username
+  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
+  document.getElementById('usernameDisplay').textContent = username;
+
+  // join the room
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
   if (!roomId) {
     chatMsgs.innerHTML = '<em>No room specified.</em>';
     return;
   }
+  socket.emit('joinRoom', { roomId, username });
 
-  // join
-  socket.emit('joinRoom', { roomId, username: document.getElementById('usernameDisplay').textContent }, res => {
-    if (res.error) {
-      chatMsgs.innerHTML = `<em>${res.error}</em>`;
-    }
-  });
-
-  // latency ping/pong
+  // helper: ping/pong for latency
   function ping() {
     const t0 = Date.now();
     socket.emit('pingCheck', { clientTime: t0 });
@@ -35,17 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
   });
-  setInterval(ping, 5000);
 
-  // handle incoming chat
-  sendBtn.addEventListener('click', () => {
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    appendMsg(document.getElementById('usernameDisplay').textContent, msg);
-    socket.emit('chat', { roomId, msg, username: document.getElementById('usernameDisplay').textContent });
-    chatInput.value = '';
-  });
-  socket.on('chat', data => appendMsg(data.username, data.msg));
+  // chat send / receive
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -53,8 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMsgs.append(d);
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
   }
+  sendBtn.addEventListener('click', () => {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    appendMsg(username, msg);
+    socket.emit('chat', { roomId, msg, username });
+    chatInput.value = '';
+  });
+  chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
+  socket.on('chat', data => appendMsg(data.username, data.msg));
 
-  // incoming stats
+  // stats updates
   socket.on('stats', arr => {
     statsList.innerHTML = '';
     arr.forEach(p => {
@@ -66,11 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // initial room state
+  // once we get the initial state from the server...
   socket.on('init', state => {
-    initState = state;
-
-    // set up title & metadata
+    // update title immediately
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -78,12 +75,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // load stream
+    // load or HLS-attach the stream
     let hls, currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.endsWith('.m3u8')) {
+      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
@@ -92,21 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // seek/play to match
-    const now     = Date.now();
-    const elapsed = (now - state.lastUpdate - latency) / 1000;
-    const target  = state.currentTime + (state.paused ? 0 : elapsed);
-    player.currentTime = target;
-    state.paused ? player.pause() : player.play();
+    // sync the time
+    ping();
+    player.pause();
+    player.addEventListener('canplay', () => {
+      const now     = Date.now();
+      const elapsed = (now - state.lastUpdate - latency) / 1000;
+      const target  = state.currentTime + (state.paused ? 0 : elapsed);
+      player.currentTime = target;
+      state.paused ? player.pause() : player.play();
 
-    setupUserEvents();
-    setupRemoteEvents();
-    startSyncLoop();
-    startStatsLoop();
+      setupUserEvents();
+      setupRemoteEvents(state);
+      startSyncLoop();
+      startStatsLoop();
+    }, { once: true });
+  });
 
-  }, { once: true });
-
-  // user → server
+  // user ↔ server event wiring
   function setupUserEvents() {
     player.addEventListener('seeked', e => {
       if (!e.isTrusted) return;
@@ -122,27 +122,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // server → user
-  function setupRemoteEvents() {
+  function setupRemoteEvents(state) {
     socket.on('seek', data => {
-      initState.currentTime = data.time;
-      initState.lastUpdate  = Date.now();
-      player.currentTime    = data.time;
+      state.currentTime = data.time;
+      state.lastUpdate = Date.now();
+      player.currentTime = data.time;
     });
     socket.on('play', data => {
-      initState.currentTime = data.time;
-      initState.paused      = false;
-      initState.lastUpdate  = Date.now();
-      player.currentTime    = data.time;
+      state.currentTime = data.time;
+      state.paused = false;
+      state.lastUpdate = Date.now();
       player.play();
     });
     socket.on('pause', data => {
-      initState.currentTime = data.time;
-      initState.paused      = true;
-      initState.lastUpdate  = Date.now();
-      player.currentTime    = data.time;
+      state.currentTime = data.time;
+      state.paused = true;
+      state.lastUpdate = Date.now();
       player.pause();
     });
+  }
+
+  // authoritative sync loop
+  function startSyncLoop() {
+    setInterval(() => {
+      const now = Date.now();
+      const elapsed = (now - initState.lastUpdate - latency) / 1000;
+      const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
+      const diff = serverTime - player.currentTime;
+      if (Math.abs(diff) > 1.0) {
+        player.currentTime = serverTime;
+      } else {
+        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
+      }
+    }, 1000);
+
+    setInterval(() => socket.emit('getState', { roomId }), 5000);
     socket.on('syncState', s => {
       initState.currentTime = s.currentTime;
       initState.paused      = s.paused;
@@ -153,38 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // authoritative sync loop
-  function startSyncLoop() {
-    setInterval(() => {
-      const now     = Date.now();
-      const elapsed = (now - initState.lastUpdate - latency) / 1000;
-      const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-      const diff       = serverTime - player.currentTime;
-
-      if (Math.abs(diff) > 1.0) {
-        // jump if way off
-        player.currentTime = serverTime;
-      } else {
-        // small nudge via playbackRate
-        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
-      }
-    }, 1000);
-
-    // also poll server for fresh authoritative state
-    setInterval(() => socket.emit('getState', { roomId }), 5000);
-  }
-
   // send stats every second
   function startStatsLoop() {
     setInterval(() => {
       socket.emit('statsUpdate', {
-        roomId,
-        username: document.getElementById('usernameDisplay').textContent,
+        username,
         latency,
         time: player.currentTime,
         platform: isMobile ? 'mobile' : 'desktop'
       });
     }, 1000);
   }
-
 });
