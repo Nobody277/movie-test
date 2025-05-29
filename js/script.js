@@ -1,20 +1,22 @@
+// public/js/script.js
 document.addEventListener('DOMContentLoaded', () => {
-  const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
-  const socket            = io(SOCKET_SERVER_URL);
-  const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
+  const SOCKET_URL = 'https://movie-night-backend-dvp8.onrender.com';
+  const socket     = io(SOCKET_URL);
+  const isMobile   = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  // UI refs
-  const player    = document.getElementById('videoPlayer');
-  const statsList = document.getElementById('statsList');
-  const chatMsgs  = document.getElementById('chatMessages');
-  const chatInput = document.getElementById('chatInput');
-  const sendBtn   = document.getElementById('sendBtn');
+  // UI elements
+  const player      = document.getElementById('videoPlayer');
+  const statsList   = document.getElementById('statsList');
+  const chatMsgs    = document.getElementById('chatMessages');
+  const chatInput   = document.getElementById('chatInput');
+  const sendBtn     = document.getElementById('sendBtn');
+  const usernameDisp= document.getElementById('usernameDisplay');
 
-  // 1) Random Guest username
-  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
-  document.getElementById('usernameDisplay').textContent = username;
+  // 1) Random Guest name
+  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
+  usernameDisp.textContent = username;
 
-  // 2) Join the room
+  // 2) Join room
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
   if (!roomId) {
@@ -23,17 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // 3) Latency ping/pong
+  // 3) Keep track of latency
   let latency = 0;
-  function ping() {
-    const t0 = Date.now();
-    socket.emit('pingCheck', { clientTime: t0 });
-  }
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
   });
+  function ping() {
+    socket.emit('pingCheck', { clientTime: Date.now() });
+  }
 
-  // 4) Chat send/receive
+  // 4) Chat functions
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -53,32 +54,31 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   socket.on('chat', data => appendMsg(data.username, data.msg));
 
-  // 5) Stats & gated sync
+  // 5) Stats + gating for sync
   let syncing = false;
   socket.on('stats', arr => {
-    // render stats list
     statsList.innerHTML = '';
     arr.forEach(p => {
-      const m = Math.floor(p.time / 60),
-            s = String(Math.floor(p.time % 60)).padStart(2, '0');
-      const li = document.createElement('li');
+      const m  = Math.floor(p.time/60),
+            s  = String(Math.floor(p.time%60)).padStart(2,'0'),
+            li = document.createElement('li');
       li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
     });
 
-    // only start the desktop sync loop once we have >1 viewer
-    if (!isMobile && arr.length > 1 && !syncing) {
+    // only start desktop sync when we have >1 viewer AND initState ready
+    if (!isMobile && initState && arr.length > 1 && !syncing) {
       syncing = true;
       startSyncLoop();
     }
   });
 
-  // 6) Handle initial state
+  // 6) Handle initial room state
   let initState = null;
   socket.on('init', state => {
     initState = state;
 
-    // update page title and Open Graph
+    // update title & OG
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -86,21 +86,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // load or HLS‑attach video
-    let hls, currentSrc = '';
-    if (state.videoUrl !== currentSrc) {
-      currentSrc = state.videoUrl;
+    // load video (HLS or direct)
+    let hls, current = '';
+    if (state.videoUrl !== current) {
+      current = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
+      if (current.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
-        hls.loadSource(currentSrc);
+        hls.loadSource(current);
         hls.attachMedia(player);
       } else {
-        player.src = currentSrc;
+        player.src = current;
       }
     }
 
-    // sync to server time, then bind events
+    // seek/play to correct spot
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
@@ -114,10 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
       bindUserEvents();
       bindRemoteEvents();
       startStatsLoop();
+      // sync loop will auto‑start once stats>1
     }, { once: true });
   });
 
-  // 7) User‑initiated controls (only when e.isTrusted)
+  // 7) User‑driven events (only when e.isTrusted)
   function bindUserEvents() {
     player.addEventListener('seeked', e => {
       if (!e.isTrusted) return;
@@ -140,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
       socket.emit('pause', { roomId, time: player.currentTime });
     });
 
-    // desktop arrow‑key ±5 sec
+    // desktop arrow‑key ±5 sec, before browser default
     window.addEventListener('keydown', e => {
       if (isMobile) return;
       if (document.activeElement === chatInput) return;
@@ -155,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { capture: true });
   }
 
-  // 8) Remote updates from other viewers
+  // 8) Remote updates from peers
   function bindRemoteEvents() {
     socket.on('seek', data => {
       initState.currentTime = data.time;
@@ -176,13 +177,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 9) Smooth‑sync loop (desktop only, starts once stats>1)
+  // 9) Smooth sync loop (desktop only)
   function startSyncLoop() {
-    const SYNC_INTERVAL  = 1000;
-    const HARD_THRESHOLD = 1.0;
-    const NUDGE_FACTOR   = 0.1;
-    const MIN_RATE       = 0.95;
-    const MAX_RATE       = 1.05;
+    const INTERVAL      = 1000;
+    const THRESHOLD     = 1.0;
+    const NUDGE_FACTOR  = 0.1;
+    const MIN_RATE      = 0.95;
+    const MAX_RATE      = 1.05;
 
     setInterval(() => {
       const now        = Date.now();
@@ -190,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
       const diff       = serverTime - player.currentTime;
 
-      if (Math.abs(diff) > HARD_THRESHOLD) {
+      if (Math.abs(diff) > THRESHOLD) {
         player.currentTime = serverTime;
       } else {
         player.playbackRate = Math.min(
@@ -198,12 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
           Math.max(MIN_RATE, 1 + diff * NUDGE_FACTOR)
         );
       }
-    }, SYNC_INTERVAL);
+    }, INTERVAL);
 
-    // periodic authoritative pull
+    // authoritative pull every 5s
     setInterval(() => {
       socket.emit('getState', { roomId });
-    }, SYNC_INTERVAL * 5);
+    }, INTERVAL * 5);
 
     socket.on('syncState', s => {
       initState.currentTime = s.currentTime;
@@ -213,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10) Broadcast your stats every second
+  // 10) Broadcast your own stats once a second
   function startStatsLoop() {
     setInterval(() => {
       socket.emit('statsUpdate', {
