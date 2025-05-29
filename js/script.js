@@ -1,22 +1,19 @@
-// public/js/script.js
 document.addEventListener('DOMContentLoaded', () => {
-  const SOCKET_URL = 'https://movie-night-backend-dvp8.onrender.com';
-  const socket     = io(SOCKET_URL);
-  const isMobile   = /Mobi|Android|iPhone/.test(navigator.userAgent);
+  const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
+  const socket            = io(SOCKET_SERVER_URL);
+  const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  // UI references
-  const player       = document.getElementById('videoPlayer');
-  const statsList    = document.getElementById('statsList');
-  const chatMsgs     = document.getElementById('chatMessages');
-  const chatInput    = document.getElementById('chatInput');
-  const sendBtn      = document.getElementById('sendBtn');
-  const usernameDisp = document.getElementById('usernameDisplay');
+  const player    = document.getElementById('videoPlayer');
+  const statsList = document.getElementById('statsList');
+  const chatMsgs  = document.getElementById('chatMessages');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn   = document.getElementById('sendBtn');
 
-  // 1) Random guest name
-  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
-  usernameDisp.textContent = username;
+  // generate a Guest username
+  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
+  document.getElementById('usernameDisplay').textContent = username;
 
-  // 2) Join room
+  // join the room
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
   if (!roomId) {
@@ -25,16 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // 3) Ping/Pong for latency
-  let latency = 0;
+  // helper: ping/pong for latency
+  function ping() {
+    const t0 = Date.now();
+    socket.emit('pingCheck', { clientTime: t0 });
+  }
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
   });
-  function ping() {
-    socket.emit('pingCheck', { clientTime: Date.now() });
-  }
 
-  // 4) Chat helpers
+  // chat send / receive
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -54,31 +51,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   socket.on('chat', data => appendMsg(data.username, data.msg));
 
-  // 5) Stats + gated sync
-  let syncing = false;
-  socket.on('stats', list => {
+  // stats updates
+  socket.on('stats', arr => {
     statsList.innerHTML = '';
-    list.forEach(p => {
-      const m  = Math.floor(p.time / 60),
-            s  = String(Math.floor(p.time % 60)).padStart(2, '0'),
-            li = document.createElement('li');
-      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
+    arr.forEach(p => {
+      const m = Math.floor(p.time/60),
+            s = String(Math.floor(p.time%60)).padStart(2,'0');
+      const li = document.createElement('li');
+      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
     });
-
-    // only start desktop sync when we have >1 viewer and initState is set
-    if (!isMobile && initState && list.length > 1 && !syncing) {
-      syncing = true;
-      startSyncLoop();
-    }
   });
 
-  // 6) Handle initial server state
-  let initState = null;
+  // once we get the initial state from the server...
   socket.on('init', state => {
-    initState = state;
-
-    // update document title & Open Graph
+    // update title immediately
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -86,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (og) og.setAttribute('content', full);
     }
 
-    // load video (HLS or direct)
+    // load or HLS-attach the stream
     let hls, currentSrc = '';
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
@@ -100,131 +87,105 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // sync to baseline, then wire up events & stats
+    // sync the time
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
       const now     = Date.now();
       const elapsed = (now - state.lastUpdate - latency) / 1000;
       const target  = state.currentTime + (state.paused ? 0 : elapsed);
-
       player.currentTime = target;
       state.paused ? player.pause() : player.play();
 
-      bindUserEvents();
-      bindRemoteEvents();
+      setupUserEvents();
+      setupRemoteEvents(state);
+      startSyncLoop();
       startStatsLoop();
-      // sync loop will auto-start once stats>1
     }, { once: true });
   });
 
-  // 7) User‑driven events (with explicit suppressSeek)
-  let suppressSeek = false;
-  function bindUserEvents() {
+  // user ↔ server event wiring
+  function setupUserEvents() {
     player.addEventListener('seeked', e => {
-      if (suppressSeek) { suppressSeek = false; return; }
       if (!e.isTrusted) return;
-      initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
       socket.emit('seek', { roomId, time: player.currentTime });
     });
     player.addEventListener('play', e => {
       if (!e.isTrusted) return;
-      initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
-      initState.paused      = false;
       socket.emit('play', { roomId, time: player.currentTime });
     });
     player.addEventListener('pause', e => {
       if (!e.isTrusted) return;
-      initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
-      initState.paused      = true;
       socket.emit('pause', { roomId, time: player.currentTime });
     });
 
-    // override desktop arrow-key skip to ±5 sec
-    window.addEventListener('keydown', e => {
-      if (isMobile) return;
+    document.addEventListener('keydown', e => {
       if (document.activeElement === chatInput) return;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      
+      if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        const delta = e.key === 'ArrowLeft' ? -5 : +5;
-        player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + delta));
-        initState.currentTime = player.currentTime;
-        initState.lastUpdate  = Date.now();
+        player.currentTime = Math.max(0, player.currentTime - 10);
+        socket.emit('seek', { roomId, time: player.currentTime });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        player.currentTime = Math.min(player.duration, player.currentTime + 10);
         socket.emit('seek', { roomId, time: player.currentTime });
       }
-    }, { capture: true });
+    });
   }
 
-  // 8) Remote events from peers
-  function bindRemoteEvents() {
+  function setupRemoteEvents(state) {
     socket.on('seek', data => {
-      initState.currentTime = data.time;
-      initState.lastUpdate  = Date.now();
-      suppressSeek = true;
-      player.currentTime    = data.time;
+      state.currentTime = data.time;
+      state.lastUpdate = Date.now();
+      player.currentTime = data.time;
     });
     socket.on('play', data => {
-      initState.currentTime = data.time;
-      initState.paused      = false;
-      initState.lastUpdate  = Date.now();
+      state.currentTime = data.time;
+      state.paused = false;
+      state.lastUpdate = Date.now();
       player.play();
     });
     socket.on('pause', data => {
-      initState.currentTime = data.time;
-      initState.paused      = true;
-      initState.lastUpdate  = Date.now();
+      state.currentTime = data.time;
+      state.paused = true;
+      state.lastUpdate = Date.now();
       player.pause();
     });
   }
 
-  // 9) Smooth‑sync loop (desktop only)
+  // authoritative sync loop
   function startSyncLoop() {
-    const INTERVAL      = 1000;
-    const THRESHOLD     = 1.0;
-    const NUDGE_FACTOR  = 0.1;
-    const MIN_RATE      = 0.95;
-    const MAX_RATE      = 1.05;
-
     setInterval(() => {
-      const now        = Date.now();
-      const elapsed    = (now - initState.lastUpdate - latency) / 1000;
+      const now = Date.now();
+      const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-      const diff       = serverTime - player.currentTime;
-
-      if (Math.abs(diff) > THRESHOLD) {
-        suppressSeek = true;
+      const diff = serverTime - player.currentTime;
+      if (Math.abs(diff) > 1.0) {
         player.currentTime = serverTime;
       } else {
-        player.playbackRate = Math.min(
-          MAX_RATE,
-          Math.max(MIN_RATE, 1 + diff * NUDGE_FACTOR)
-        );
+        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
       }
-    }, INTERVAL);
+    }, 1000);
 
-    // authoritative pull every 5s
-    setInterval(() => {
-      socket.emit('getState', { roomId });
-    }, INTERVAL * 5);
-
+    setInterval(() => socket.emit('getState', { roomId }), 5000);
     socket.on('syncState', s => {
       initState.currentTime = s.currentTime;
       initState.paused      = s.paused;
       initState.lastUpdate  = s.lastUpdate;
-      s.paused ? player.pause() : player.play();
+      if (s.paused !== player.paused) {
+        s.paused ? player.pause() : player.play();
+      }
     });
   }
 
-  // 10) Broadcast our stats once a second
+  // send stats every second
   function startStatsLoop() {
     setInterval(() => {
       socket.emit('statsUpdate', {
         username,
         latency,
-        time:     player.currentTime,
+        time: player.currentTime,
         platform: isMobile ? 'mobile' : 'desktop'
       });
     }, 1000);
