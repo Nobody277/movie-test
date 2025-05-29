@@ -63,8 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // once we get the initial state from the server...
+  let initState;
+
   socket.on('init', state => {
+    initState = { ...state };
+
     // update title immediately
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
@@ -117,6 +120,20 @@ document.addEventListener('DOMContentLoaded', () => {
     player.addEventListener('pause', e => {
       if (!e.isTrusted) return;
       socket.emit('pause', { roomId, time: player.currentTime });
+    });
+
+    document.addEventListener('keydown', e => {
+      if (document.activeElement === chatInput) return;
+      
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        player.currentTime = Math.max(0, player.currentTime - 10);
+        socket.emit('seek', { roomId, time: player.currentTime });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        player.currentTime = Math.min(player.duration, player.currentTime + 10);
+        socket.emit('seek', { roomId, time: player.currentTime });
+      }
     });
   }
 
