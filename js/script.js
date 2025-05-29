@@ -9,8 +9,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chatInput');
   const sendBtn   = document.getElementById('sendBtn');
 
+  // ← NEW: arrow‐key seeking (skip ±10 sec)
+  document.addEventListener('keydown', e => {
+    // if focus is in chat input, don’t intercept
+    if (document.activeElement === chatInput) return;
+
+    if (e.key === 'ArrowRight') {
+      // skip ahead 10 seconds
+      player.currentTime = Math.min(player.duration, player.currentTime + 10);
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft') {
+      // skip back 10 seconds
+      player.currentTime = Math.max(0, player.currentTime - 10);
+      e.preventDefault();
+    }
+  });
+
   // generate a Guest username
-  const username = `Guest #${Math.floor(Math.random()*1000)+1}`;
+  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
   document.getElementById('usernameDisplay').textContent = username;
 
   // join the room
@@ -21,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   socket.emit('joinRoom', { roomId, username });
+
+  let latency = 0;
 
   // helper: ping/pong for latency
   function ping() {
@@ -55,8 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('stats', arr => {
     statsList.innerHTML = '';
     arr.forEach(p => {
-      const m = Math.floor(p.time/60),
-            s = String(Math.floor(p.time%60)).padStart(2,'0');
+      const m = Math.floor(p.time / 60),
+            s = String(Math.floor(p.time % 60)).padStart(2, '0');
       const li = document.createElement('li');
       li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
       statsList.append(li);
@@ -117,20 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
     player.addEventListener('pause', e => {
       if (!e.isTrusted) return;
       socket.emit('pause', { roomId, time: player.currentTime });
-    });
-
-    document.addEventListener('keydown', e => {
-      if (document.activeElement === chatInput) return;
-      
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        player.currentTime = Math.max(0, player.currentTime - 10);
-        socket.emit('seek', { roomId, time: player.currentTime });
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        player.currentTime = Math.min(player.duration, player.currentTime + 10);
-        socket.emit('seek', { roomId, time: player.currentTime });
-      }
     });
   }
 
