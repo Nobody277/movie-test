@@ -65,8 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // once we get the initial state from the server...
   socket.on('init', state => {
+    // Store the initial state
+    initState = state;
+
     // update title immediately
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
@@ -144,7 +146,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // authoritative sync loop
   function startSyncLoop() {
+    if (!initState) {
+      console.warn('Sync loop started before state initialization');
+      return;
+    }
+
     setInterval(() => {
+      if (!initState) return;
+      
       const now = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
@@ -158,9 +167,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setInterval(() => socket.emit('getState', { roomId }), 5000);
     socket.on('syncState', s => {
+      if (!initState) return;
+      
       initState.currentTime = s.currentTime;
-      initState.paused      = s.paused;
-      initState.lastUpdate  = s.lastUpdate;
+      initState.paused = s.paused;
+      initState.lastUpdate = s.lastUpdate;
       if (s.paused !== player.paused) {
         s.paused ? player.pause() : player.play();
       }
