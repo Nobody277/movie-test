@@ -1,27 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
-  const socket = io(SOCKET_SERVER_URL, {
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000
-  });
-  
-  const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
-  let initState = null;
-  let latencySamples = [];
+  const SERVER = 'https://movie-night-backend-dvp8.onrender.com';
+  const socket = io(SERVER);
+  const mobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
+  let state = null;
   let latency = 0;
-  let isSelfEvent = false;
-  let lastSyncTime = 0;
-  let syncCount = 0;
-  let driftHistory = [];
-  const DRIFT_HISTORY_SIZE = 5;
-
-  // Debug logging function
-  function debugLog(message, data = {}) {
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
-    const prefix = `[${timestamp}] DEBUG:`;
-    console.log(prefix, message, data);
-  }
+  let selfEvent = false;
 
   const player = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
@@ -29,11 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chatInput');
   const sendBtn = document.getElementById('sendBtn');
 
-  // generate a Guest username
   const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
   document.getElementById('usernameDisplay').textContent = username;
 
-  // join the room
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
   if (!roomId) {
@@ -41,38 +22,30 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   
-  debugLog('Joining room', { roomId, username });
   socket.emit('joinRoom', { roomId, username });
 
-  // helper: ping/pong for latency with averaging
   function ping() {
-    const t0 = Date.now();
-    socket.emit('pingCheck', { clientTime: t0 });
+    const start = Date.now();
+    socket.emit('pingCheck', { time: start });
   }
   
-  socket.on('pongCheck', ({ clientTime }) => {
-    const rtt = Date.now() - clientTime;
-    latencySamples.push(rtt / 2);
-
-    // Keep last 5 samples and average
-    if (latencySamples.length > 5) latencySamples.shift();
-    latency = latencySamples.reduce((a, b) => a + b, 0) / latencySamples.length;
-    debugLog('Pong received', { rtt, latency });
+  socket.on('pongCheck', ({ time }) => {
+    const rtt = Date.now() - time;
+    latency = rtt / 2;
   });
 
-  // chat send / receive
-  function appendMsg(user, text) {
-    const d = document.createElement('div');
-    d.className = 'chatMessage';
-    d.innerHTML = `<span class="user">${user}:</span> ${text}`;
-    chatMsgs.append(d);
+  function addMsg(user, text) {
+    const msg = document.createElement('div');
+    msg.className = 'chatMessage';
+    msg.innerHTML = `<span class="user">${user}:</span> ${text}`;
+    chatMsgs.append(msg);
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
   }
   
   sendBtn.addEventListener('click', () => {
     const msg = chatInput.value.trim();
     if (!msg) return;
-    appendMsg(username, msg);
+    addMsg(username, msg);
     socket.emit('chat', { roomId, msg, username });
     chatInput.value = '';
   });
@@ -81,301 +54,161 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') sendBtn.click();
   });
   
-  socket.on('chat', data => appendMsg(data.username, data.msg));
+  socket.on('chat', data => addMsg(data.username, data.msg));
 
-  // stats updates
-  socket.on('stats', arr => {
+  socket.on('stats', users => {
     statsList.innerHTML = '';
-    arr.forEach(p => {
-      const m = Math.floor(p.time / 60),
-        s = String(Math.floor(p.time % 60)).padStart(2, '0');
-      const li = document.createElement('li');
-      li.textContent = `${p.username} | ${p.platform} | ${Math.round(p.latency)} ms | ${m}:${s}`;
-      statsList.append(li);
+    users.forEach(u => {
+      const m = Math.floor(u.time/60);
+      const s = String(Math.floor(u.time%60)).padStart(2,'0');
+      const item = document.createElement('li');
+      item.textContent = `${u.username} | ${u.platform} | ${Math.round(u.latency)} ms | ${m}:${s}`;
+      statsList.append(item);
     });
   });
 
-  socket.on('init', state => {
-    debugLog('Received init state', state);
-    initState = state;
-    lastSyncTime = Date.now();
-
-    // update title
-    if (state.title) {
-      const full = `Movie Night - ${state.title}`;
-      document.title = full;
-      const og = document.querySelector('meta[property="og:title"]');
-      if (og) og.setAttribute('content', full);
+  socket.on('init', s => {
+    state = s;
+    
+    if (s.title) {
+      const title = `Movie Night - ${s.title}`;
+      document.title = title;
+      const meta = document.querySelector('meta[property="og:title"]');
+      if (meta) meta.setAttribute('content', title);
     }
 
-    // load or HLS-attach the stream
-    let hls, currentSrc = '';
-    if (state.videoUrl !== currentSrc) {
-      currentSrc = state.videoUrl;
-      if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
+    let hls, src = '';
+    if (s.videoUrl !== src) {
+      src = s.videoUrl;
+      if (hls) hls.destroy();
+      if (src.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
-        hls.loadSource(currentSrc);
+        hls.loadSource(src);
         hls.attachMedia(player);
       } else {
-        player.src = currentSrc;
+        player.src = src;
       }
     }
 
-    // Setup player event listeners first
-    setupPlayerEventListeners();
+    setupEvents();
     
-    // sync the time
     ping();
     player.pause();
     
     player.addEventListener('canplay', () => {
       const now = Date.now();
-      const elapsed = (now - state.lastUpdate - latency) / 1000;
-      const target = state.currentTime + (state.paused ? 0 : elapsed);
+      const elapsed = (now - s.lastUpdate - latency) / 1000;
+      const target = s.currentTime + (s.paused ? 0 : elapsed);
       
-      debugLog('Canplay event - setting time', { 
-        now, 
-        lastUpdate: state.lastUpdate, 
-        latency,
-        elapsed,
-        targetTime: target,
-        playerTime: player.currentTime
-      });
-      
-      // Mark as programmatic seek
-      isSelfEvent = true;
+      selfEvent = true;
       player.currentTime = target;
-      lastSyncTime = now;
       
-      if (state.paused) {
-        player.pause();
-      } else {
-        player.play().catch(e => debugLog('Play error', e));
-      }
+      s.paused ? player.pause() : player.play();
       
-      // Setup remote events and start loops
-      setupRemoteEvents(state);
-      startSyncLoop();
-      startStatsLoop();
+      startSync();
+      startStats();
       
-      // Reset self event flag after seek completes
-      setTimeout(() => {
-        isSelfEvent = false;
-        debugLog('Initial sync completed', {
-          playerTime: player.currentTime,
-          targetTime: target
-        });
-      }, 1000);
+      setTimeout(() => selfEvent = false, 1000);
     }, { once: true });
   });
 
-  function setupPlayerEventListeners() {
-    debugLog('Setting up player event listeners');
+  function setupEvents() {
+    player.onseeked = e => {
+      if (!e.isTrusted || selfEvent) return;
+      socket.emit('seek', { roomId, time: player.currentTime });
+    };
     
-    // Remove any existing listeners first
-    player.removeEventListener('seeked', handleSeek);
-    player.removeEventListener('play', handlePlay);
-    player.removeEventListener('pause', handlePause);
+    player.onplay = e => {
+      if (!e.isTrusted || selfEvent) return;
+      socket.emit('play', { roomId, time: player.currentTime });
+    };
     
-    // Add new listeners
-    player.addEventListener('seeked', handleSeek);
-    player.addEventListener('play', handlePlay);
-    player.addEventListener('pause', handlePause);
-  }
-  
-  function handleSeek(e) {
-    debugLog('Seeked event', {
-      isTrusted: e.isTrusted,
-      isSelfEvent,
-      currentTime: player.currentTime
-    });
-    
-    if (!e.isTrusted || isSelfEvent) return;
-    debugLog('Emitting seek event', player.currentTime);
-    socket.emit('seek', { roomId, time: player.currentTime });
-  }
-  
-  function handlePlay(e) {
-    debugLog('Play event', {
-      isTrusted: e.isTrusted,
-      isSelfEvent,
-      currentTime: player.currentTime
-    });
-    
-    if (!e.isTrusted || isSelfEvent) return;
-    debugLog('Emitting play event', player.currentTime);
-    socket.emit('play', { roomId, time: player.currentTime });
-  }
-  
-  function handlePause(e) {
-    debugLog('Pause event', {
-      isTrusted: e.isTrusted,
-      isSelfEvent,
-      currentTime: player.currentTime
-    });
-    
-    if (!e.isTrusted || isSelfEvent) return;
-    debugLog('Emitting pause event', player.currentTime);
-    socket.emit('pause', { roomId, time: player.currentTime });
+    player.onpause = e => {
+      if (!e.isTrusted || selfEvent) return;
+      socket.emit('pause', { roomId, time: player.currentTime });
+    };
   }
 
-  function setupRemoteEvents(state) {
-    debugLog('Setting up remote event listeners');
-    
-    socket.off('seek');
-    socket.off('play');
-    socket.off('pause');
-    
-    socket.on('seek', data => {
-      const timeDiff = Math.abs(player.currentTime - data.time);
-      debugLog('Received remote seek', {
-        data,
-        currentTime: player.currentTime,
-        difference: timeDiff
-      });
-      
-      if (timeDiff > 0.5) {
-        debugLog('Applying remote seek', data.time);
-        isSelfEvent = true;
-        state.currentTime = data.time;
-        state.lastUpdate = Date.now();
-        player.currentTime = data.time;
-        setTimeout(() => isSelfEvent = false, 100);
-      }
-    });
-    
-    socket.on('play', data => {
-      debugLog('Received remote play', data);
-      isSelfEvent = true;
-      state.currentTime = data.time;
-      state.paused = false;
-      state.lastUpdate = Date.now();
-      player.play().catch(e => debugLog('Remote play error', e));
-      setTimeout(() => isSelfEvent = false, 100);
-    });
-    
-    socket.on('pause', data => {
-      debugLog('Received remote pause', data);
-      isSelfEvent = true;
-      state.currentTime = data.time;
-      state.paused = true;
-      state.lastUpdate = Date.now();
-      player.pause();
-      setTimeout(() => isSelfEvent = false, 100);
-    });
-  }
-
-  // Hybrid sync with time adjustment and playback rate
-  function startSyncLoop() {
-    if (!initState) {
-      console.warn('Sync loop started before state initialization');
-      return;
+  socket.on('seek', data => {
+    const diff = Math.abs(player.currentTime - data.time);
+    if (diff > 0.5) {
+      selfEvent = true;
+      player.currentTime = data.time;
+      setTimeout(() => selfEvent = false, 100);
     }
+  });
+  
+  socket.on('play', () => {
+    selfEvent = true;
+    player.play();
+    setTimeout(() => selfEvent = false, 100);
+  });
+  
+  socket.on('pause', () => {
+    selfEvent = true;
+    player.pause();
+    setTimeout(() => selfEvent = false, 100);
+  });
 
-    debugLog('Starting hybrid sync loop');
+  function startSync() {
+    if (!state) return;
     
-    const syncInterval = setInterval(() => {
-      if (!initState) {
-        clearInterval(syncInterval);
-        return;
-      }
+    setInterval(() => {
+      if (!state) return;
       
-      syncCount++;
       const now = Date.now();
-      const elapsed = (now - initState.lastUpdate - latency) / 1000;
-      const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
+      const elapsed = (now - state.lastUpdate - latency) / 1000;
+      const serverTime = state.currentTime + (state.paused ? 0 : elapsed);
       const drift = serverTime - player.currentTime;
       const absDrift = Math.abs(drift);
       
-      // Calculate average drift
-      driftHistory.push(drift);
-      if (driftHistory.length > DRIFT_HISTORY_SIZE) {
-        driftHistory.shift();
-      }
-      const avgDrift = driftHistory.reduce((sum, val) => sum + val, 0) / driftHistory.length;
-      
-      // Only adjust if we're playing and there's significant drift
       if (!player.paused) {
         // Large drift correction
-        if (absDrift > 1.0) {
-          debugLog(`Large drift correction #${syncCount}`, {
-            serverTime,
-            playerTime: player.currentTime,
-            drift,
-            avgDrift
-          });
-          
-          isSelfEvent = true;
-          player.currentTime = player.currentTime + drift * 0.5; // Partial correction
-          setTimeout(() => isSelfEvent = false, 100);
+        if (absDrift > 2.0) {
+          selfEvent = true;
+          player.currentTime += drift * 0.5;
+          player.playbackRate = 1.0;
+          setTimeout(() => selfEvent = false, 100);
         } 
-        // Small drift correction with playback rate
+        // Playback rate adjustment
         else if (absDrift > 0.1) {
-          // Calculate playback rate adjustment (limited to ±2%)
-          const rateAdjustment = Math.min(0.02, Math.max(-0.02, drift * 0.01));
-          const newRate = 1.0 + rateAdjustment;
-          
-          debugLog(`Playback rate adjustment #${syncCount}`, {
-            serverTime,
-            playerTime: player.currentTime,
-            drift,
-            avgDrift,
-            newRate
-          });
-          
-          player.playbackRate = newRate;
+          const rate = 1 + Math.min(0.05, Math.max(-0.05, drift * 0.01));
+          player.playbackRate = rate;
         }
-        // Reset to normal speed when in sync
+        // Reset to normal speed
         else if (player.playbackRate !== 1.0) {
-          debugLog(`Resetting playback rate to 1.0`);
           player.playbackRate = 1.0;
         }
       }
-    }, 1000); // Sync every 1 second
-
-    // State sync every 5 seconds
-    setInterval(() => {
-      debugLog('Requesting state update');
-      socket.emit('getState', { roomId });
-    }, 5000);
+    }, 1000);
+    
+    // Get updated state every 5 seconds
+    setInterval(() => socket.emit('getState', { roomId }), 5000);
     
     socket.on('syncState', s => {
-      if (!initState) return;
-      debugLog('Received syncState', s);
-      
-      // Only update if state is newer
-      if (s.lastUpdate > initState.lastUpdate) {
-        initState.currentTime = s.currentTime;
-        initState.paused = s.paused;
-        initState.lastUpdate = s.lastUpdate;
+      if (!state) return;
+      if (s.lastUpdate > state.lastUpdate) {
+        state.currentTime = s.currentTime;
+        state.paused = s.paused;
+        state.lastUpdate = s.lastUpdate;
         
         if (s.paused !== player.paused) {
-          debugLog(`Pause state changed to ${s.paused}`);
-          isSelfEvent = true;
-          s.paused ? player.pause() : player.play().catch(e => debugLog('Play error', e));
-          setTimeout(() => isSelfEvent = false, 100);
+          selfEvent = true;
+          s.paused ? player.pause() : player.play();
+          setTimeout(() => selfEvent = false, 100);
         }
       }
     });
   }
 
-  // send stats every second
-  function startStatsLoop() {
+  function startStats() {
     setInterval(() => {
       socket.emit('statsUpdate', {
         username,
         latency,
         time: player.currentTime,
-        platform: isMobile ? 'mobile' : 'desktop'
+        platform: mobile ? 'mobile' : 'desktop'
       });
     }, 1000);
   }
-  
-  // Initial debug info
-  debugLog('Player initialized', {
-    userAgent: navigator.userAgent,
-    isMobile,
-    roomId
-  });
 });
