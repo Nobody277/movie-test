@@ -1,12 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
-  const socket = io(SOCKET_SERVER_URL);
+  const socket = io(SOCKET_SERVER_URL, {
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000
+  });
+  
   const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
   let initState = null;
   let latencySamples = [];
   let latency = 0;
-  let isSelfEvent = false; // Track if event is self-originated
-  let lastProgrammaticSeek = 0; // Track last programmatic seek time
+  let isSelfEvent = false;
+  let lastSyncTime = 0;
+  let syncCount = 0;
+
+  // Debug logging function
+  function debugLog(message, data = {}) {
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+    const prefix = `[${timestamp}] DEBUG:`;
+    console.log(prefix, message, data);
+  }
 
   const player = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
@@ -25,6 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMsgs.innerHTML = '<em>No room specified.</em>';
     return;
   }
+  
+  debugLog('Joining room', { roomId, username });
   socket.emit('joinRoom', { roomId, username });
 
   // helper: ping/pong for latency with averaging
@@ -32,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const t0 = Date.now();
     socket.emit('pingCheck', { clientTime: t0 });
   }
+  
   socket.on('pongCheck', ({ clientTime }) => {
     const rtt = Date.now() - clientTime;
     latencySamples.push(rtt / 2);
@@ -39,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep last 5 samples and average
     if (latencySamples.length > 5) latencySamples.shift();
     latency = latencySamples.reduce((a, b) => a + b, 0) / latencySamples.length;
+    debugLog('Pong received', { rtt, latency });
   });
 
   // chat send / receive
@@ -49,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMsgs.append(d);
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
   }
+  
   sendBtn.addEventListener('click', () => {
     const msg = chatInput.value.trim();
     if (!msg) return;
@@ -56,9 +74,11 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('chat', { roomId, msg, username });
     chatInput.value = '';
   });
+  
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') sendBtn.click();
   });
+  
   socket.on('chat', data => appendMsg(data.username, data.msg));
 
   // stats updates
@@ -74,8 +94,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('init', state => {
-    // Store the initial state
+    debugLog('Received init state', state);
     initState = state;
+    lastSyncTime = Date.now();
 
     // update title
     if (state.title) {
@@ -99,51 +120,121 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Setup player event listeners first
+    setupPlayerEventListeners();
+    
     // sync the time
     ping();
     player.pause();
+    
     player.addEventListener('canplay', () => {
       const now = Date.now();
       const elapsed = (now - state.lastUpdate - latency) / 1000;
       const target = state.currentTime + (state.paused ? 0 : elapsed);
       
+      debugLog('Canplay event - setting time', { 
+        now, 
+        lastUpdate: state.lastUpdate, 
+        latency,
+        elapsed,
+        targetTime: target,
+        playerTime: player.currentTime
+      });
+      
       // Mark as programmatic seek
       isSelfEvent = true;
       player.currentTime = target;
-      setTimeout(() => isSelfEvent = false, 100); // Reset after seek completes
+      lastSyncTime = now;
       
-      state.paused ? player.pause() : player.play();
-      setupUserEvents();
+      if (state.paused) {
+        player.pause();
+      } else {
+        player.play().catch(e => debugLog('Play error', e));
+      }
+      
+      // Setup remote events and start loops
       setupRemoteEvents(state);
       startSyncLoop();
       startStatsLoop();
+      
+      // Reset self event flag after seek completes
+      setTimeout(() => {
+        isSelfEvent = false;
+        debugLog('Initial sync completed', {
+          playerTime: player.currentTime,
+          targetTime: target
+        });
+      }, 1000);
     }, { once: true });
   });
 
-  // user ↔ server event wiring
-  function setupUserEvents() {
-    player.addEventListener('seeked', e => {
-      // Ignore self-originated and programmatic events
-      if (!e.isTrusted || isSelfEvent) return;
-      socket.emit('seek', { roomId, time: player.currentTime });
+  function setupPlayerEventListeners() {
+    debugLog('Setting up player event listeners');
+    
+    // Remove any existing listeners first
+    player.removeEventListener('seeked', handleSeek);
+    player.removeEventListener('play', handlePlay);
+    player.removeEventListener('pause', handlePause);
+    
+    // Add new listeners
+    player.addEventListener('seeked', handleSeek);
+    player.addEventListener('play', handlePlay);
+    player.addEventListener('pause', handlePause);
+  }
+  
+  function handleSeek(e) {
+    debugLog('Seeked event', {
+      isTrusted: e.isTrusted,
+      isSelfEvent,
+      currentTime: player.currentTime
     });
-
-    player.addEventListener('play', e => {
-      if (!e.isTrusted || isSelfEvent) return;
-      socket.emit('play', { roomId, time: player.currentTime });
+    
+    if (!e.isTrusted || isSelfEvent) return;
+    debugLog('Emitting seek event', player.currentTime);
+    socket.emit('seek', { roomId, time: player.currentTime });
+  }
+  
+  function handlePlay(e) {
+    debugLog('Play event', {
+      isTrusted: e.isTrusted,
+      isSelfEvent,
+      currentTime: player.currentTime
     });
-
-    player.addEventListener('pause', e => {
-      if (!e.isTrusted || isSelfEvent) return;
-      socket.emit('pause', { roomId, time: player.currentTime });
+    
+    if (!e.isTrusted || isSelfEvent) return;
+    debugLog('Emitting play event', player.currentTime);
+    socket.emit('play', { roomId, time: player.currentTime });
+  }
+  
+  function handlePause(e) {
+    debugLog('Pause event', {
+      isTrusted: e.isTrusted,
+      isSelfEvent,
+      currentTime: player.currentTime
     });
+    
+    if (!e.isTrusted || isSelfEvent) return;
+    debugLog('Emitting pause event', player.currentTime);
+    socket.emit('pause', { roomId, time: player.currentTime });
   }
 
   function setupRemoteEvents(state) {
+    debugLog('Setting up remote event listeners');
+    
+    socket.off('seek');
+    socket.off('play');
+    socket.off('pause');
+    
     socket.on('seek', data => {
-      // Only sync if difference is significant
-      if (Math.abs(player.currentTime - data.time) > 0.5) {
-        // Mark as programmatic seek
+      const timeDiff = Math.abs(player.currentTime - data.time);
+      debugLog('Received remote seek', {
+        data,
+        currentTime: player.currentTime,
+        difference: timeDiff
+      });
+      
+      if (timeDiff > 0.5) {
+        debugLog('Applying remote seek', data.time);
         isSelfEvent = true;
         state.currentTime = data.time;
         state.lastUpdate = Date.now();
@@ -151,17 +242,19 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => isSelfEvent = false, 100);
       }
     });
-
+    
     socket.on('play', data => {
+      debugLog('Received remote play', data);
       isSelfEvent = true;
       state.currentTime = data.time;
       state.paused = false;
       state.lastUpdate = Date.now();
-      player.play();
+      player.play().catch(e => debugLog('Remote play error', e));
       setTimeout(() => isSelfEvent = false, 100);
     });
-
+    
     socket.on('pause', data => {
+      debugLog('Received remote pause', data);
       isSelfEvent = true;
       state.currentTime = data.time;
       state.paused = true;
@@ -178,40 +271,57 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    debugLog('Starting sync loop');
+    
     const syncInterval = setInterval(() => {
       if (!initState) {
         clearInterval(syncInterval);
         return;
       }
-
+      
+      syncCount++;
       const now = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
       const diff = serverTime - player.currentTime;
-
+      const absDiff = Math.abs(diff);
+      
       // Only adjust if difference is significant and not paused
-      if (Math.abs(diff) > 0.2 && !player.paused) {
-        // Prevent programmatic seeks from triggering events
+      if (absDiff > 0.2 && !player.paused) {
+        const newTime = player.currentTime + diff * 0.1;
+        debugLog(`Sync adjustment #${syncCount}`, {
+          serverTime,
+          playerTime: player.currentTime,
+          diff,
+          newTime
+        });
+        
         isSelfEvent = true;
-        player.currentTime += diff * 0.1;
+        player.currentTime = newTime;
         setTimeout(() => isSelfEvent = false, 100);
       }
-    }, 1000); // Less frequent adjustments
+    }, 1000); // Sync every 1 second
 
     // State sync every 5 seconds
-    setInterval(() => socket.emit('getState', { roomId }), 5000);
+    setInterval(() => {
+      debugLog('Requesting state update');
+      socket.emit('getState', { roomId });
+    }, 5000);
+    
     socket.on('syncState', s => {
       if (!initState) return;
-
+      debugLog('Received syncState', s);
+      
       // Only update if state is newer
       if (s.lastUpdate > initState.lastUpdate) {
         initState.currentTime = s.currentTime;
         initState.paused = s.paused;
         initState.lastUpdate = s.lastUpdate;
-
+        
         if (s.paused !== player.paused) {
+          debugLog(`Pause state changed to ${s.paused}`);
           isSelfEvent = true;
-          s.paused ? player.pause() : player.play();
+          s.paused ? player.pause() : player.play().catch(e => debugLog('Play error', e));
           setTimeout(() => isSelfEvent = false, 100);
         }
       }
@@ -229,4 +339,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }, 1000);
   }
+  
+  // Initial debug info
+  debugLog('Player initialized', {
+    userAgent: navigator.userAgent,
+    isMobile,
+    roomId
+  });
 });
