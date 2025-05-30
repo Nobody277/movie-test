@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let isSelfEvent = false;
   let lastSyncTime = 0;
   let syncCount = 0;
+  let driftHistory = [];
+  const DRIFT_HISTORY_SIZE = 5;
 
   // Debug logging function
   function debugLog(message, data = {}) {
@@ -264,14 +266,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // sync loop
+  // Hybrid sync with time adjustment and playback rate
   function startSyncLoop() {
     if (!initState) {
       console.warn('Sync loop started before state initialization');
       return;
     }
 
-    debugLog('Starting sync loop');
+    debugLog('Starting hybrid sync loop');
     
     const syncInterval = setInterval(() => {
       if (!initState) {
@@ -283,22 +285,52 @@ document.addEventListener('DOMContentLoaded', () => {
       const now = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
-      const diff = serverTime - player.currentTime;
-      const absDiff = Math.abs(diff);
+      const drift = serverTime - player.currentTime;
+      const absDrift = Math.abs(drift);
       
-      // Only adjust if difference is significant and not paused
-      if (absDiff > 0.2 && !player.paused) {
-        const newTime = player.currentTime + diff * 0.1;
-        debugLog(`Sync adjustment #${syncCount}`, {
-          serverTime,
-          playerTime: player.currentTime,
-          diff,
-          newTime
-        });
-        
-        isSelfEvent = true;
-        player.currentTime = newTime;
-        setTimeout(() => isSelfEvent = false, 100);
+      // Calculate average drift
+      driftHistory.push(drift);
+      if (driftHistory.length > DRIFT_HISTORY_SIZE) {
+        driftHistory.shift();
+      }
+      const avgDrift = driftHistory.reduce((sum, val) => sum + val, 0) / driftHistory.length;
+      
+      // Only adjust if we're playing and there's significant drift
+      if (!player.paused) {
+        // Large drift correction
+        if (absDrift > 1.0) {
+          debugLog(`Large drift correction #${syncCount}`, {
+            serverTime,
+            playerTime: player.currentTime,
+            drift,
+            avgDrift
+          });
+          
+          isSelfEvent = true;
+          player.currentTime = player.currentTime + drift * 0.5; // Partial correction
+          setTimeout(() => isSelfEvent = false, 100);
+        } 
+        // Small drift correction with playback rate
+        else if (absDrift > 0.1) {
+          // Calculate playback rate adjustment (limited to ±2%)
+          const rateAdjustment = Math.min(0.02, Math.max(-0.02, drift * 0.01));
+          const newRate = 1.0 + rateAdjustment;
+          
+          debugLog(`Playback rate adjustment #${syncCount}`, {
+            serverTime,
+            playerTime: player.currentTime,
+            drift,
+            avgDrift,
+            newRate
+          });
+          
+          player.playbackRate = newRate;
+        }
+        // Reset to normal speed when in sync
+        else if (player.playbackRate !== 1.0) {
+          debugLog(`Resetting playback rate to 1.0`);
+          player.playbackRate = 1.0;
+        }
       }
     }, 1000); // Sync every 1 second
 
