@@ -2,6 +2,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
   const socket            = io(SOCKET_SERVER_URL);
   const isMobile          = /Mobi|Android|iPhone/.test(navigator.userAgent);
+  let initState           = null;
+  let latencySamples      = [];
+  let latency             = 0;
+  let isInitialSync       = true;
 
   const player    = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
@@ -22,13 +26,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   socket.emit('joinRoom', { roomId, username });
 
-  // helper: ping/pong for latency
+  // helper: ping/pong for latency with averaging
   function ping() {
     const t0 = Date.now();
     socket.emit('pingCheck', { clientTime: t0 });
   }
   socket.on('pongCheck', ({ clientTime }) => {
-    latency = (Date.now() - clientTime) / 2;
+    const rtt = Date.now() - clientTime;
+    latencySamples.push(rtt / 2);
+    
+    // Keep last 5 samples and average
+    if (latencySamples.length > 5) latencySamples.shift();
+    latency = latencySamples.reduce((a, b) => a + b, 0) / latencySamples.length;
   });
 
   // chat send / receive
@@ -63,9 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // once we get the initial state from the server...
   socket.on('init', state => {
-    // update title immediately
+    // Store the initial state
+    initState = state;
+    isInitialSync = true;  // Mark initial sync in progress
+
+    // update title
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -94,44 +106,57 @@ document.addEventListener('DOMContentLoaded', () => {
       const now     = Date.now();
       const elapsed = (now - state.lastUpdate - latency) / 1000;
       const target  = state.currentTime + (state.paused ? 0 : elapsed);
+      
+      // Gradual sync without seeking
       player.currentTime = target;
+      
+      // Setup events after initial sync
       state.paused ? player.pause() : player.play();
-
       setupUserEvents();
       setupRemoteEvents(state);
       startSyncLoop();
       startStatsLoop();
+      
+      // Mark initial sync complete after short delay
+      setTimeout(() => isInitialSync = false, 2000);
     }, { once: true });
   });
 
   // user ↔ server event wiring
   function setupUserEvents() {
     player.addEventListener('seeked', e => {
-      if (!e.isTrusted) return;
+      if (!e.isTrusted || isInitialSync) return;
       socket.emit('seek', { roomId, time: player.currentTime });
     });
+    
     player.addEventListener('play', e => {
-      if (!e.isTrusted) return;
+      if (!e.isTrusted || isInitialSync) return;
       socket.emit('play', { roomId, time: player.currentTime });
     });
+    
     player.addEventListener('pause', e => {
-      if (!e.isTrusted) return;
+      if (!e.isTrusted || isInitialSync) return;
       socket.emit('pause', { roomId, time: player.currentTime });
     });
   }
 
   function setupRemoteEvents(state) {
     socket.on('seek', data => {
-      state.currentTime = data.time;
-      state.lastUpdate = Date.now();
-      player.currentTime = data.time;
+      // Only sync if difference is significant
+      if (Math.abs(player.currentTime - data.time) > 0.5) {
+        state.currentTime = data.time;
+        state.lastUpdate = Date.now();
+        player.currentTime = data.time;
+      }
     });
+    
     socket.on('play', data => {
       state.currentTime = data.time;
       state.paused = false;
       state.lastUpdate = Date.now();
       player.play();
     });
+    
     socket.on('pause', data => {
       state.currentTime = data.time;
       state.paused = true;
@@ -140,27 +165,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // authoritative sync loop
+  // sync loop
   function startSyncLoop() {
-    setInterval(() => {
+    if (!initState) {
+      console.warn('Sync loop started before state initialization');
+      return;
+    }
+
+    const syncInterval = setInterval(() => {
+      if (!initState) {
+        clearInterval(syncInterval);
+        return;
+      }
+      
       const now = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
       const diff = serverTime - player.currentTime;
-      if (Math.abs(diff) > 1.0) {
-        player.currentTime = serverTime;
-      } else {
-        player.playbackRate = Math.min(1.05, Math.max(0.95, 1 + diff * 0.1));
+      
+      // Only adjust if difference is significant
+      if (Math.abs(diff) > 0.2) {
+        // Smooth adjustment (1/10th of difference per second)
+        player.currentTime += diff * 0.1;
       }
-    }, 1000);
-
+    }, 100);  // More frequent but gentle adjustments
+    
+    // State sync every 5 seconds
     setInterval(() => socket.emit('getState', { roomId }), 5000);
     socket.on('syncState', s => {
-      initState.currentTime = s.currentTime;
-      initState.paused      = s.paused;
-      initState.lastUpdate  = s.lastUpdate;
-      if (s.paused !== player.paused) {
-        s.paused ? player.pause() : player.play();
+      if (!initState) return;
+      
+      // Only update if state is newer
+      if (s.lastUpdate > initState.lastUpdate) {
+        initState.currentTime = s.currentTime;
+        initState.paused = s.paused;
+        initState.lastUpdate = s.lastUpdate;
+        
+        if (s.paused !== player.paused) {
+          s.paused ? player.pause() : player.play();
+        }
       }
     });
   }
