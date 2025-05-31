@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let state = null;
   let latency = 0;
   let selfEvent = false;
+  let lastUpdate = 0;
 
   const player = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
@@ -69,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('init', s => {
     state = s;
+    lastUpdate = s.lastUpdate;
     
     if (s.title) {
       const title = `Movie Night - ${s.title}`;
@@ -98,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     player.addEventListener('canplay', () => {
       const now = Date.now();
       const elapsed = (now - s.lastUpdate - latency) / 1000;
-      const target = s.currentTime + (s.paused ? 0 : elapsed);
+      const target = s.paused ? s.currentTime : s.currentTime + elapsed;
       
       selfEvent = true;
       player.currentTime = target;
@@ -115,17 +117,23 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupEvents() {
     player.onseeked = e => {
       if (!e.isTrusted || selfEvent) return;
+      if (Date.now() - lastUpdate < 500) return;
       socket.emit('seek', { roomId, time: player.currentTime });
+      lastUpdate = Date.now();
     };
     
     player.onplay = e => {
       if (!e.isTrusted || selfEvent) return;
+      if (Date.now() - lastUpdate < 500) return;
       socket.emit('play', { roomId, time: player.currentTime });
+      lastUpdate = Date.now();
     };
     
     player.onpause = e => {
       if (!e.isTrusted || selfEvent) return;
+      if (Date.now() - lastUpdate < 500) return;
       socket.emit('pause', { roomId, time: player.currentTime });
+      lastUpdate = Date.now();
     };
   }
 
@@ -138,59 +146,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   
-  socket.on('play', () => {
-    selfEvent = true;
+  socket.on('play', data => {
+    if (Math.abs(player.currentTime - data.time) > 0.5) {
+      selfEvent = true;
+      player.currentTime = data.time;
+      setTimeout(() => selfEvent = false, 100);
+    }
     player.play();
-    setTimeout(() => selfEvent = false, 100);
   });
   
   socket.on('pause', () => {
-    selfEvent = true;
     player.pause();
-    setTimeout(() => selfEvent = false, 100);
   });
 
   function startSync() {
     if (!state) return;
     
     setInterval(() => {
-      if (!state) return;
+      if (!state || player.paused) return;
       
       const now = Date.now();
       const elapsed = (now - state.lastUpdate - latency) / 1000;
-      const serverTime = state.currentTime + (state.paused ? 0 : elapsed);
+      const serverTime = state.paused ? state.currentTime : state.currentTime + elapsed;
       const drift = serverTime - player.currentTime;
       const absDrift = Math.abs(drift);
       
-      if (!player.paused) {
-        // Large drift correction
-        if (absDrift > 2.0) {
-          selfEvent = true;
-          player.currentTime += drift * 0.5;
-          player.playbackRate = 1.0;
-          setTimeout(() => selfEvent = false, 100);
-        } 
-        // Playback rate adjustment
-        else if (absDrift > 0.1) {
-          const rate = 1 + Math.min(0.05, Math.max(-0.05, drift * 0.01));
-          player.playbackRate = rate;
-        }
-        // Reset to normal speed
-        else if (player.playbackRate !== 1.0) {
-          player.playbackRate = 1.0;
-        }
+      if (absDrift > 2.0) {
+        selfEvent = true;
+        player.currentTime += drift * 0.5;
+        setTimeout(() => selfEvent = false, 100);
+      } 
+      else if (absDrift > 0.1) {
+        const rate = 1 + Math.min(0.05, Math.max(-0.05, drift * 0.01));
+        player.playbackRate = rate;
+      }
+      else if (player.playbackRate !== 1.0) {
+        player.playbackRate = 1.0;
       }
     }, 1000);
     
-    // Get updated state every 5 seconds
     setInterval(() => socket.emit('getState', { roomId }), 5000);
     
     socket.on('syncState', s => {
       if (!state) return;
       if (s.lastUpdate > state.lastUpdate) {
-        state.currentTime = s.currentTime;
-        state.paused = s.paused;
-        state.lastUpdate = s.lastUpdate;
+        state = s;
         
         if (s.paused !== player.paused) {
           selfEvent = true;
