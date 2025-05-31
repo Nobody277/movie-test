@@ -3,26 +3,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const socket = io(SOCKET_SERVER_URL);
   const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  // random Guest #n
   const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
   document.getElementById('usernameDisplay').textContent = username;
 
-  // sync settings
-  const SYNC_INTERVAL  = 1000,
-        HARD_THRESHOLD = 1.0,
-        NUDGE         = 0.1,
-        MIN_RATE      = 0.95,
-        MAX_RATE      = 1.05;
+  const SYNC_INTERVAL = 1000,
+    HARD_THRESHOLD = 1.0,
+    NUDGE = 0.1,
+    MIN_RATE = 0.95,
+    MAX_RATE = 1.05;
 
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
 
-  // UI refs
-  const player    = document.getElementById('videoPlayer');
+  const player = document.getElementById('videoPlayer');
   const statsList = document.getElementById('statsList');
-  const chatMsgs  = document.getElementById('chatMessages');
+  const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
-  const sendBtn   = document.getElementById('sendBtn');
+  const sendBtn = document.getElementById('sendBtn');
 
   const params = new URLSearchParams(location.search);
   const roomId = params.get('room');
@@ -49,9 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
   }
   function fmtTime(s) {
-    const m   = Math.floor(s/60),
-          sec = Math.floor(s%60).toString().padStart(2,'0');
-    return `${m}:${sec}`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    const min = m.toString().padStart(2, '0');
+    return `${h}:${min}:${sec}`;
   }
 
   sendBtn.addEventListener('click', () => {
@@ -76,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('init', state => {
-    // update title & og:title on client
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
       document.title = full;
@@ -96,24 +94,32 @@ document.addEventListener('DOMContentLoaded', () => {
         player.src = currentSrc;
       }
     }
-    ping(); player.pause();
+    ping();
+    player.pause();
     player.addEventListener('canplay', () => {
-      const now     = Date.now();
+      const now = Date.now();
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
-      const target  = initState.currentTime + (initState.paused ? 0 : elapsed);
+      const target = initState.currentTime + (initState.paused ? 0 : elapsed);
 
-      supSeek = true; player.currentTime = target;
-      if (initState.paused) { supPause=true; player.pause(); }
-      else                  { supPlay=true;  player.play(); }
+      supSeek = true;
+      player.currentTime = target;
+      if (initState.paused) {
+        supPause = true;
+        player.pause();
+      } else {
+        supPlay = true;
+        player.play();
+      }
 
-      setupSync(); startSync();
+      setupSync();
+      startSync();
 
       setInterval(() => {
         socket.emit('statsUpdate', {
           username,
           latency,
           time: player.currentTime,
-          platform: isMobile? 'mobile':'desktop'
+          platform: isMobile ? 'mobile' : 'desktop'
         });
       }, 1000);
     }, { once: true });
@@ -123,51 +129,74 @@ document.addEventListener('DOMContentLoaded', () => {
     player.addEventListener('seeked', () => {
       if (supSeek) { supSeek = false; return; }
       initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
-      socket.emit('seek',{ roomId, time: player.currentTime });
+      initState.lastUpdate = Date.now();
+      socket.emit('seek', { roomId, time: player.currentTime });
     });
     player.addEventListener('play', () => {
       if (supPlay) { supPlay = false; return; }
       initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
-      initState.paused      = false;
-      socket.emit('play',{ roomId, time: player.currentTime });
+      initState.lastUpdate = Date.now();
+      initState.paused = false;
+      socket.emit('play', { roomId, time: player.currentTime });
     });
     player.addEventListener('pause', () => {
       if (supPause) { supPause = false; return; }
       initState.currentTime = player.currentTime;
-      initState.lastUpdate  = Date.now();
-      initState.paused      = true;
-      socket.emit('pause',{ roomId, time: player.currentTime });
+      initState.lastUpdate = Date.now();
+      initState.paused = true;
+      socket.emit('pause', { roomId, time: player.currentTime });
     });
 
-    socket.on('play', d => { initState.currentTime=d.time; initState.paused=false; initState.lastUpdate=Date.now(); supPlay=true;  player.play(); });
-    socket.on('pause',d => { initState.currentTime=d.time; initState.paused=true;  initState.lastUpdate=Date.now(); supPause=true; player.pause(); });
-    socket.on('seek', d => { initState.currentTime=d.time; initState.lastUpdate=Date.now(); supSeek=true; player.currentTime=d.time; });
+    socket.on('play', d => {
+      initState.currentTime = d.time;
+      initState.paused = false;
+      initState.lastUpdate = Date.now();
+      supPlay = true;
+      player.play();
+    });
+    socket.on('pause', d => {
+      initState.currentTime = d.time;
+      initState.paused = true;
+      initState.lastUpdate = Date.now();
+      supPause = true;
+      player.pause();
+    });
+    socket.on('seek', d => {
+      initState.currentTime = d.time;
+      initState.lastUpdate = Date.now();
+      supSeek = true;
+      player.currentTime = d.time;
+    });
   }
 
   function startSync() {
     if (isMobile) return;
     setInterval(() => {
-      const now   = Date.now();
-      const elapsed = (now - initState.lastUpdate - latency)/1000;
-      const serverTime = initState.currentTime + (initState.paused?0:elapsed);
+      const now = Date.now();
+      const elapsed = (now - initState.lastUpdate - latency) / 1000;
+      const serverTime = initState.currentTime + (initState.paused ? 0 : elapsed);
       const diff = serverTime - player.currentTime;
       if (Math.abs(diff) > HARD_THRESHOLD) {
-        supSeek=true; player.currentTime=serverTime;
+        supSeek = true;
+        player.currentTime = serverTime;
       } else {
-        player.playbackRate = Math.min(MAX_RATE, Math.max(MIN_RATE,1+diff*NUDGE));
+        player.playbackRate = Math.min(MAX_RATE, Math.max(MIN_RATE, 1 + diff * NUDGE));
       }
     }, SYNC_INTERVAL);
 
-    setInterval(() => { socket.emit('getState',{roomId}); }, SYNC_INTERVAL*5);
+    setInterval(() => { socket.emit('getState', { roomId }); }, SYNC_INTERVAL * 5);
     socket.on('syncState', s => {
-      initState.currentTime=s.currentTime;
-      initState.paused     =s.paused;
-      initState.lastUpdate =s.lastUpdate;
+      initState.currentTime = s.currentTime;
+      initState.paused = s.paused;
+      initState.lastUpdate = s.lastUpdate;
       if (s.paused !== player.paused) {
-        if (s.paused) { supPause=true; player.pause(); }
-        else           { supPlay=true;  player.play(); }
+        if (s.paused) {
+          supPause = true;
+          player.pause();
+        } else {
+          supPlay = true;
+          player.play();
+        }
       }
     });
   }
