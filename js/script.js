@@ -8,9 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const SYNC_INTERVAL = 1000,
     HARD_THRESHOLD = 1.0,
-    NUDGE = 0.4,
-    MIN_RATE = 0.90,
-    MAX_RATE = 1.10;
+    NUDGE = 0.8,
+    MIN_RATE = 0.80,
+    MAX_RATE = 1.20;
 
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         player.currentTime = serverTime;
       } else {
         player.playbackRate = Math.min(MAX_RATE, Math.max(MIN_RATE, 1 + diff * NUDGE));
-        //console.log('Current playback rate:', player.playbackRate);
+        console.log('Current playback rate:', player.playbackRate);
       }
     }, SYNC_INTERVAL);
 
