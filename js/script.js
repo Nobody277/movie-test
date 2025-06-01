@@ -37,7 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('pongCheck', ({ clientTime }) => {
     latency = (Date.now() - clientTime) / 2;
   });
-
+  
+  setInterval(ping, 1000);
+  
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -181,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         player.currentTime = serverTime;
       } else {
         player.playbackRate = Math.min(MAX_RATE, Math.max(MIN_RATE, 1 + diff * NUDGE));
+        console.log('Current playback rate:', player.playbackRate);
       }
     }, SYNC_INTERVAL);
 
