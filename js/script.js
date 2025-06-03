@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
+      new Plyr(player);
       const now = Date.now() + clockOffset;
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const target = initState.currentTime + (initState.paused ? 0 : elapsed);
@@ -233,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
         player.currentTime = serverTime;
       } else {
         player.playbackRate = Math.min(MAX_RATE, Math.max(MIN_RATE, 1 + diff * NUDGE));
-        console.log('Current playback rate:', player.playbackRate);
       }
     }, SYNC_INTERVAL);
 
