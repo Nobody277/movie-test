@@ -103,6 +103,43 @@ button {
   to   { opacity:1; transform:translateY(0); }
 }
 
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+}
+
+.modal-content {
+  background: var(--in-bg);
+  border: 1px solid var(--in-border);
+  border-radius: 8px;
+  margin: 15% auto;
+  padding: 20px;
+  max-width: 400px;
+  color: var(--fg);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: var(--accent);
+}
+
+#usernameInput {
+  width: 100%;
+  padding: .5rem .75rem;
+  margin: 10px 0;
+  border: 1px solid var(--in-border);
+  border-radius: 6px;
+  background: var(--in-bg);
+  color: var(--fg);
+}
+
 @media (max-width: 768px) {
   #chatSidebar {
     max-width: 280px;

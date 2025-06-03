@@ -13,6 +13,15 @@
   <script src="https://cdn.socket.io/4.7.1/socket.io.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+  <div id="usernameModal" class="modal">
+    <div class="modal-content">
+      <h2>Choose Your Username</h2>
+      <p>Enter a username to use in chat:</p>
+      <input type="text" id="usernameInput" placeholder="Enter username..." maxlength="20" />
+      <button id="saveUsername">Save</button>
+    </div>
+  </div>
+
   <div id="videoContainer">
     <video id="videoPlayer" controls playsinline webkit-playsinline x-webkit-airplay="allow"></video>
   </div>

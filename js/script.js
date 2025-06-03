@@ -3,14 +3,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const socket = io(SOCKET_SERVER_URL);
   const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
-  const username = `Guest #${Math.floor(Math.random() * 1000) + 1}`;
-  document.getElementById('usernameDisplay').textContent = username;
+  const savedUsername = localStorage.getItem('movieNightUsername');
+  let username = savedUsername || `Guest #${Math.floor(Math.random() * 1000) + 1}`;
+  const usernameDisplay = document.getElementById('usernameDisplay');
+  const usernameModal = document.getElementById('usernameModal');
+  const usernameInput = document.getElementById('usernameInput');
+  const saveUsernameBtn = document.getElementById('saveUsername');
+  
+  usernameDisplay.textContent = username;
+
+  function showUsernamePrompt() {
+    usernameModal.style.display = 'block';
+    usernameInput.value = username;
+    usernameInput.focus();
+  }
+
+  function updateUsername(newUsername) {
+    if (newUsername && newUsername.trim() && newUsername !== username) {
+      const oldUsername = username;
+      username = newUsername.trim();
+      localStorage.setItem('movieNightUsername', username);
+      usernameDisplay.textContent = username;
+      socket.emit('chat', {
+        roomId,
+        username: 'System',
+        msg: `${oldUsername} changed their name to ${username}`
+      });
+    }
+    usernameModal.style.display = 'none';
+  }
+
+  saveUsernameBtn.addEventListener('click', () => {
+    updateUsername(usernameInput.value);
+  });
+
+  usernameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      updateUsername(usernameInput.value);
+    }
+  });
+
+  let hasPromptedForUsername = false;
 
   const SYNC_INTERVAL = 1000,
     HARD_THRESHOLD = 1.0,
-    NUDGE = 0.8,
-    MIN_RATE = 0.80,
-    MAX_RATE = 1.20;
+    NUDGE = 0.1,
+    MIN_RATE = 0.95,
+    MAX_RATE = 1.05;
 
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
@@ -54,10 +93,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const min = m.toString().padStart(2, '0');
     return `${h}:${min}:${sec}`;
   }
-
   sendBtn.addEventListener('click', () => {
     const t = chatInput.value.trim();
     if (!t) return;
+    
+    // Show username prompt for guest users on first message
+    if (!hasPromptedForUsername && username.startsWith('Guest #')) {
+      hasPromptedForUsername = true;
+      showUsernamePrompt();
+      return;
+    }
+    
     appendMsg(username, t);
     socket.emit('chat', { roomId, msg: t, username });
     chatInput.value = '';
