@@ -126,27 +126,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const container = document.getElementById('videoContainer');
-  function updateAmbient() {
-    canvas.width = player.videoWidth;
-    canvas.height = player.videoHeight;
-    ctx.drawImage(player, 0, 0, canvas.width, canvas.height);
-    const x = Math.floor(canvas.width / 2);
-    const y = Math.floor(canvas.height / 2);
-    const p = ctx.getImageData(x, y, 1, 1).data;
-    container.style.setProperty('--ambient-color', `rgba(${p[0]}, ${p[1]}, ${p[2]}, 0.4)`);
-  }
-  player.addEventListener('play', () => {
-    (function loop() {
-      if (!player.paused) {
-        updateAmbient();
-        requestAnimationFrame(loop);
-      }
-    })();
-  });
-
   socket.on('init', state => {
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
