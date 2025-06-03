@@ -149,8 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
-      new Plyr(player, { keyboard: { global: true } });
       player.addEventListener('dblclick', e => e.stopImmediatePropagation());
+      new Plyr(player, {clickToPlay: false, keyboard: { global: true }, shortcuts: { seek: { forward: 5, back: 5 } }});
       const now = Date.now() + clockOffset;
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const target = initState.currentTime + (initState.paused ? 0 : elapsed);
