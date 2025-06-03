@@ -150,7 +150,22 @@ document.addEventListener('DOMContentLoaded', () => {
     player.pause();
     player.addEventListener('canplay', () => {
       player.addEventListener('dblclick', e => e.stopImmediatePropagation());
-      new Plyr(player, {clickToPlay: false, keyboard: { global: true }, shortcuts: { seek: { forward: 5, back: 5 } }});
+      new Plyr(player, {
+        clickToPlay: false,
+        keyboard: { global: true },
+        shortcuts: { seek: false }
+      });
+      window.addEventListener('keydown', e => {
+        if (document.activeElement.tagName === 'INPUT') return;
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          player.currentTime += 5;
+        }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          player.currentTime -= 5;
+        }
+      });
       const now = Date.now() + clockOffset;
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
       const target = initState.currentTime + (initState.paused ? 0 : elapsed);
