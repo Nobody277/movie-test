@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   setInterval(ping, 1000);
-  
+
   function appendMsg(user, text) {
     const d = document.createElement('div');
     d.className = 'chatMessage';
@@ -126,6 +126,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  function containsM3u8InQuery(url) {
+    try {
+      const u = new URL(url);
+      if (u.searchParams.has('url')) {
+        return u.searchParams.get('url').toLowerCase().endsWith('.m3u8');
+      }
+      return u.pathname.toLowerCase().endsWith('.m3u8');
+    } catch {
+      return false;
+    }
+  }
+
   socket.on('init', state => {
     if (state.title) {
       const full = `Movie Night - ${state.title}`;
@@ -138,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
+      if (containsM3u8InQuery(currentSrc) && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
