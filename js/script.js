@@ -139,7 +139,11 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        hls = new Hls();
+      hls = new Hls({
+        xhrSetup: (xhr, url) => {
+      xhr.setRequestHeader('Referer', 'https://kwik.cx/');
+      }
+    });
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
       } else {
