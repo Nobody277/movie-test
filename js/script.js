@@ -47,10 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let hasPromptedForUsername = false;
 
   const SYNC_INTERVAL = 1000,
-    HARD_THRESHOLD = 1.0,
-    NUDGE = 0.1,
-    MIN_RATE = 0.95,
-    MAX_RATE = 1.05;
+        HARD_THRESHOLD = 1.0,
+        NUDGE = 0.1,
+        MIN_RATE = 0.95,
+        MAX_RATE = 1.05;
 
   const proxyHeaders = encodeURIComponent(JSON.stringify({ Referer: 'https://kwik.cx/' }));
   const proxyBase = 'https://proxy.rivestream.net/m3u8-proxy?headers=' + proxyHeaders + '&url=';
@@ -162,8 +162,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
+
       navigator.serviceWorker.ready.then(() => {
-        if (currentSrc.includes('.m3u8')) {
+        if (currentSrc.includes('.m3u8') && typeof videojs !== 'undefined') {
           const options = {
             autoplay: true,
             muted: true,
@@ -202,11 +203,18 @@ document.addEventListener('DOMContentLoaded', () => {
           vjsPlayer.on('error', () => {
             console.error('Video.js error:', vjsPlayer.error());
           });
+        } else if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
+          hls = new Hls({ loader: ProxyLoader });
+          hls.loadSource(currentSrc);
+          player.crossOrigin = 'anonymous';
+          hls.attachMedia(player);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => { player.muted = true; player.play(); });
         } else {
           player.src = currentSrc;
         }
       });
     }
+
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
