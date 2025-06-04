@@ -162,15 +162,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        hls = new Hls({ loader: ProxyLoader });
-        hls.loadSource(currentSrc);
-        player.crossOrigin = 'anonymous';
-        hls.attachMedia(player);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { player.muted = true; player.play(); });
-      } else {
-        player.src = currentSrc;
-      }
+      navigator.serviceWorker.ready.then(() => {
+        if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
+          hls = new Hls({ loader: ProxyLoader });
+          hls.loadSource(currentSrc);
+          player.crossOrigin = 'anonymous';
+          hls.attachMedia(player);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => { player.muted = true; player.play(); });
+        } else {
+          player.src = currentSrc;
+        }
+      });
     }
     ping();
     player.pause();
