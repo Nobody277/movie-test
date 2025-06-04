@@ -19,7 +19,7 @@
     <div class="modal-content">
       <h2>Choose Your Username</h2>
       <p>Enter a username to use in chat:</p>
-      <input type="text" id="usernameInput" placeholder="Enter username..." maxlength="20" />
+      <input type="text" id="usernameInput" placeholder="Enter username." maxlength="20" />
       <button id="saveUsername">Save</button>
     </div>
   </div>
@@ -48,5 +48,10 @@
   </aside>
 
   <script src="js/script.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('js/sw.js');
+    }
+  </script>
 </body>
 </html>
