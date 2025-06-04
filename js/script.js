@@ -137,15 +137,27 @@ document.addEventListener('DOMContentLoaded', () => {
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
-      if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-      hls = new Hls({
-        xhrSetup: (xhr, url) => {
-      xhr.setRequestHeader('Referer', 'https://kwik.cx/');
+      if (hls) {
+        hls.destroy();
+        hls = null;
       }
-    });
-        hls.loadSource(currentSrc);
+      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
+        class ProxyLoader extends Hls.DefaultConfig.loader {
+          load(context, config, callbacks) {
+            const origUrl = context.url;
+            const proxyUrl =
+              'https://proxy.rivestream.net/m3u8-proxy?url=' +
+              encodeURIComponent(origUrl) +
+              '&headers=' +
+              encodeURIComponent('{"Referer":"https://kwik.cx/"}');
+
+            context.url = proxyUrl;
+            super.load(context, config, callbacks);
+          }
+        }
+        hls = new Hls({ loader: ProxyLoader });
         hls.attachMedia(player);
+        hls.loadSource(currentSrc);
       } else {
         player.src = currentSrc;
       }
