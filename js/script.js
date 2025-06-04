@@ -47,35 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let hasPromptedForUsername = false;
 
   const SYNC_INTERVAL = 1000,
-        HARD_THRESHOLD = 1.0,
-        NUDGE = 0.1,
-        MIN_RATE = 0.95,
-        MAX_RATE = 1.05;
-
-  // ProxyLoader exactly as in test.html’s service worker pattern :contentReference[oaicite:0]{index=0}
-  const proxyHeaders = encodeURIComponent(JSON.stringify({ Referer: 'https://kwik.cx/' }));
-  const proxyBase = 'https://proxy.rivestream.net/m3u8-proxy?headers=' + proxyHeaders + '&url=';
-
-  class ProxyLoader {
-    constructor(config) {
-      this.config = config;
-    }
-    load(context, config, callbacks) {
-      const origUrl = context.url;
-      const proxiedUrl = proxyBase + encodeURIComponent(origUrl);
-      fetch(proxiedUrl)
-        .then(response => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.arrayBuffer();
-        })
-        .then(data => {
-          callbacks.onSuccess({ data: new Uint8Array(data) }, context);
-        })
-        .catch(err => {
-          callbacks.onError({ code: err.message }, context);
-        });
-    }
-  }
+    HARD_THRESHOLD = 1.0,
+    NUDGE = 0.1,
+    MIN_RATE = 0.95,
+    MAX_RATE = 1.05;
 
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
@@ -163,24 +138,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-
-      // Wait until service worker takes control, then use Hls.js + ProxyLoader
-      navigator.serviceWorker.ready.then(() => {
-        if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-          hls = new Hls({ loader: ProxyLoader });
-          hls.loadSource(currentSrc);
-          player.crossOrigin = 'anonymous';
-          hls.attachMedia(player);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            player.muted = true;
-            player.play();
-          });
-        } else {
-          player.src = currentSrc;
-        }
-      });
+      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(currentSrc);
+        hls.attachMedia(player);
+      } else {
+        player.src = currentSrc;
+      }
     }
-
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
