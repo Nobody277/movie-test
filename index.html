@@ -13,13 +13,18 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://cdn.socket.io/4.7.1/socket.io.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.min.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
 </head>
 <body>
   <div id="usernameModal" class="modal">
     <div class="modal-content">
       <h2>Choose Your Username</h2>
       <p>Enter a username to use in chat:</p>
-      <input type="text" id="usernameInput" placeholder="Enter username." maxlength="20" />
+      <input type="text" id="usernameInput" placeholder="Enter username..." maxlength="20" />
       <button id="saveUsername">Save</button>
     </div>
   </div>
@@ -48,10 +53,5 @@
   </aside>
 
   <script src="js/script.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
-    }
-  </script>
 </body>
 </html>
