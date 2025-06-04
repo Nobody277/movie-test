@@ -163,12 +163,45 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
       navigator.serviceWorker.ready.then(() => {
-        if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-          hls = new Hls({ loader: ProxyLoader });
-          hls.loadSource(currentSrc);
-          player.crossOrigin = 'anonymous';
-          hls.attachMedia(player);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => { player.muted = true; player.play(); });
+        if (currentSrc.includes('.m3u8')) {
+          const options = {
+            autoplay: true,
+            muted: true,
+            controls: true,
+            fluid: true,
+            preload: 'auto',
+            html5: {
+              vhs: {
+                enableLowInitialPlaylist: true,
+                useDevicePixelRatio: true
+              },
+              nativeAudioTracks: false,
+              nativeVideoTracks: false
+            },
+            controlBar: {
+              volumePanel: true,
+              playToggle: true,
+              seekToLive: true,
+              liveDisplay: true,
+              remainingTimeDisplay: false
+            },
+            plugins: {
+              httpSourceSelector: {
+                default: 'auto'
+              }
+            },
+            sources: [
+              { src: currentSrc, type: 'application/x-mpegURL' }
+            ]
+          };
+          const vjsPlayer = videojs('videoPlayer', options);
+          vjsPlayer.ready(() => {
+            vjsPlayer.httpSourceSelector();
+            vjsPlayer.play().catch(() => {});
+          });
+          vjsPlayer.on('error', () => {
+            console.error('Video.js error:', vjsPlayer.error());
+          });
         } else {
           player.src = currentSrc;
         }
