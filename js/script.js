@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         MIN_RATE = 0.95,
         MAX_RATE = 1.05;
 
+  // ProxyLoader exactly as in test.html’s service worker pattern :contentReference[oaicite:0]{index=0}
   const proxyHeaders = encodeURIComponent(JSON.stringify({ Referer: 'https://kwik.cx/' }));
   const proxyBase = 'https://proxy.rivestream.net/m3u8-proxy?headers=' + proxyHeaders + '&url=';
 
@@ -163,52 +164,17 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
 
+      // Wait until service worker takes control, then use Hls.js + ProxyLoader
       navigator.serviceWorker.ready.then(() => {
-        if (currentSrc.includes('.m3u8') && typeof videojs !== 'undefined') {
-          const options = {
-            autoplay: true,
-            muted: true,
-            controls: true,
-            fluid: true,
-            preload: 'auto',
-            html5: {
-              vhs: {
-                enableLowInitialPlaylist: true,
-                useDevicePixelRatio: true
-              },
-              nativeAudioTracks: false,
-              nativeVideoTracks: false
-            },
-            controlBar: {
-              volumePanel: true,
-              playToggle: true,
-              seekToLive: true,
-              liveDisplay: true,
-              remainingTimeDisplay: false
-            },
-            plugins: {
-              httpSourceSelector: {
-                default: 'auto'
-              }
-            },
-            sources: [
-              { src: currentSrc, type: 'application/x-mpegURL' }
-            ]
-          };
-          const vjsPlayer = videojs('videoPlayer', options);
-          vjsPlayer.ready(() => {
-            vjsPlayer.httpSourceSelector();
-            vjsPlayer.play().catch(() => {});
-          });
-          vjsPlayer.on('error', () => {
-            console.error('Video.js error:', vjsPlayer.error());
-          });
-        } else if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
+        if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
           hls = new Hls({ loader: ProxyLoader });
           hls.loadSource(currentSrc);
           player.crossOrigin = 'anonymous';
           hls.attachMedia(player);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => { player.muted = true; player.play(); });
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            player.muted = true;
+            player.play();
+          });
         } else {
           player.src = currentSrc;
         }
