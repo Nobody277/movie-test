@@ -52,6 +52,30 @@ document.addEventListener('DOMContentLoaded', () => {
     MIN_RATE = 0.95,
     MAX_RATE = 1.05;
 
+  const proxyHeaders = encodeURIComponent(JSON.stringify({ Referer: 'https://kwik.cx/' }));
+  const proxyBase = 'https://proxy.rivestream.net/m3u8-proxy?headers=' + proxyHeaders + '&url=';
+
+  class ProxyLoader {
+    constructor(config) {
+      this.config = config;
+    }
+    load(context, config, callbacks) {
+      const origUrl = context.url;
+      const proxiedUrl = proxyBase + encodeURIComponent(origUrl);
+      fetch(proxiedUrl)
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.arrayBuffer();
+        })
+        .then(data => {
+          callbacks.onSuccess({ data: new Uint8Array(data) }, context);
+        })
+        .catch(err => {
+          callbacks.onError({ code: err.message }, context);
+        });
+    }
+  }
+
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
 
@@ -139,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        hls = new Hls();
+        hls = new Hls({ loader: ProxyLoader });
         hls.loadSource(currentSrc);
         player.crossOrigin = 'anonymous';
         hls.attachMedia(player);
