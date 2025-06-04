@@ -137,16 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
-      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
+      if (hls) { hls.destroy(); hls = null; }
+      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
+        hls.loadSource(currentSrc);
         hls.attachMedia(player);
-        hls.loadSource(
-          `${SOCKET_SERVER_URL}/hls-proxy?url=${encodeURIComponent(currentSrc)}&headers=${encodeURIComponent('{"Referer":"https://kwik.cx/"}')}`
-        );
       } else {
         player.src = currentSrc;
       }
