@@ -142,22 +142,11 @@ document.addEventListener('DOMContentLoaded', () => {
         hls = null;
       }
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        class ProxyLoader extends Hls.DefaultConfig.loader {
-          load(context, config, callbacks) {
-            const origUrl = context.url;
-            const proxyUrl =
-              'https://proxy.rivestream.net/m3u8-proxy?url=' +
-              encodeURIComponent(origUrl) +
-              '&headers=' +
-              encodeURIComponent('{"Referer":"https://kwik.cx/"}');
-
-            context.url = proxyUrl;
-            super.load(context, config, callbacks);
-          }
-        }
-        hls = new Hls({ loader: ProxyLoader });
+        hls = new Hls();
         hls.attachMedia(player);
-        hls.loadSource(currentSrc);
+        hls.loadSource(
+          `${SOCKET_SERVER_URL}/hls-proxy?url=${encodeURIComponent(currentSrc)}&headers=${encodeURIComponent('{"Referer":"https://kwik.cx/"}')}`
+        );
       } else {
         player.src = currentSrc;
       }
