@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
   const socket = io(SOCKET_SERVER_URL);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
   const savedUsername = localStorage.getItem('movieNightUsername');
   let username = savedUsername || `Guest #${Math.floor(Math.random() * 1000) + 1}`;
@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let supSeek = false, supPlay = false, supPause = false;
 
   const player = document.getElementById('videoPlayer');
-  const playOverlay = document.getElementById('playOverlay');
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
@@ -134,13 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const og = document.querySelector('meta[property="og:title"]');
       if (og) og.setAttribute('content', full);
     }
-    console.log('videoUrl: ', state.videoUrl);
+
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-
-      if (!isIOS && currentSrc.includes('.m3u8') && Hls.isSupported()) {
+      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
@@ -150,9 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     ping();
     player.pause();
-    if (playOverlay) {
-      playOverlay.classList.remove('hidden');
-    }
     player.addEventListener('canplay', () => {
       new Plyr(player);
       window.addEventListener('keydown', e => {
@@ -172,14 +167,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       supSeek = true;
       player.currentTime = target;
-      supPause = initState.paused;
-      player.pause();
-
-      playOverlay.addEventListener('click', () => {
+      if (initState.paused) {
+        supPause = true;
+        player.pause();
+      } else {
         supPlay = true;
         player.play();
-        playOverlay.classList.add('hidden');
-      }, { once: true });
+      }
 
       setupSync();
       startSync();
@@ -189,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
           username,
           latency,
           time: player.currentTime,
-          platform: isIOS ? 'iOS' : 'desktop'
+          platform: isMobile ? 'mobile' : 'desktop'
         });
       }, 1000);
     }, { once: true });
@@ -240,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startSync() {
-    if (isIOS) return;
+    if (isMobile) return;
     setInterval(() => {
       const now = Date.now() + clockOffset;
       const elapsed = (now - initState.lastUpdate - latency) / 1000;
