@@ -134,15 +134,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const og = document.querySelector('meta[property="og:title"]');
       if (og) og.setAttribute('content', full);
     }
-    console.log('[INIT] server sent videoUrl →', state.videoUrl);
+    console.log('videoUrl: ', state.videoUrl);
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
+
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
-        hls.loadSource(currentSrc);
         hls.attachMedia(player);
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('[HLS] media attached, loading source:', currentSrc);
+          hls.loadSource(currentSrc);
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('[HLS] manifest parsed successfully');
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('[HLS] error:', data);
+        });
       } else {
         player.src = currentSrc;
       }
