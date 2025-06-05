@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const og = document.querySelector('meta[property="og:title"]');
       if (og) og.setAttribute('content', full);
     }
-
+    console.log('[INIT] server sent videoUrl →', state.videoUrl);
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
