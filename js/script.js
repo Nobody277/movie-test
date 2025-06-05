@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let supSeek = false, supPlay = false, supPause = false;
 
   const player = document.getElementById('videoPlayer');
+  const playOverlay = document.getElementById('playOverlay');
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
@@ -148,6 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     ping();
     player.pause();
+    playOverlay.classList.remove('hidden');
+
     player.addEventListener('canplay', () => {
       new Plyr(player);
       window.addEventListener('keydown', e => {
@@ -167,13 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       supSeek = true;
       player.currentTime = target;
-      if (initState.paused) {
-        supPause = true;
-        player.pause();
-      } else {
+      supPause = initState.paused;
+      player.pause();
+
+      playOverlay.addEventListener('click', () => {
         supPlay = true;
         player.play();
-      }
+        playOverlay.classList.add('hidden');
+      }, { once: true });
 
       setupSync();
       startSync();
