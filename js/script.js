@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        hls = new Hls();
+        hls = new Hls({ audioCodec: 'mp4a.40.2' });
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
       } else {
