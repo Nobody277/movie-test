@@ -11,6 +11,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const usernameInput = document.getElementById('usernameInput');
   const saveUsernameBtn = document.getElementById('saveUsername');
   
+  socket.on('disconnect', (reason) => {
+      console.warn('[Socket disconnected]', reason);
+    });
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('[Socket reconnected] attempt', attemptNumber);
+      socket.emit('joinRoom', { roomId, username });
+    });
+    socket.on('connect_error', (err) => {
+      console.error('[Socket connect_error]', err);
+    });
+
   usernameDisplay.textContent = username;
 
   function showUsernamePrompt() {
@@ -30,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         username: 'System',
         msg: `${oldUsername} changed their name to ${username}`
       });
+      socket.emit('changeUsername', { newUsername: username });
     }
     usernameModal.style.display = 'none';
   }
@@ -56,6 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let supSeek = false, supPlay = false, supPause = false;
 
   const player = document.getElementById('videoPlayer');
+  player.addEventListener('error', (e) => {
+    console.error('[Video element error]', player.error);
+  });
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
@@ -94,10 +109,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function fmtTime(s) {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    const sec = Math.round(s % 60).toString().padStart(2, '0');
     const min = m.toString().padStart(2, '0');
     return `${h}:${min}:${sec}`;
   }
+
   sendBtn.addEventListener('click', () => {
     const t = chatInput.value.trim();
     if (!t) return;
@@ -140,6 +156,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hls) { hls.destroy(); hls = null; }
       if (currentSrc.includes('.m3u8') && Hls.isSupported() && !isMobile) {
         hls = new Hls();
+        hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('[HLS error]', data);
+        if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          console.warn('fatal network error encountered, attempting to restart load');
+          hls.startLoad(/*startPosition=*/ undefined);
+        }
+        else if (data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          console.warn('fatal media error encountered, attempting to recover');
+          hls.recoverMediaError();
+        }
+        else if (data.fatal) {
+          console.error('Unrecoverable HLS error, destroying hls instance', data);
+          hls.destroy();
+        }
+        });
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
       } else {
