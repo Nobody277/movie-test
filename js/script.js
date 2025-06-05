@@ -138,8 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
-        hls = new Hls({ audioCodec: 'mp4a.40.2' });
+      if (currentSrc.includes('.m3u8') && Hls.isSupported() && !isMobile) {
+        hls = new Hls();
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
       } else {
