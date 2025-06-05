@@ -87,9 +87,13 @@ body {
   background:rgba(255,255,255,0.1);
   border-radius:6px; max-width:80%;
   animation:fadeIn .3s ease;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 .chatMessage .user {
   font-weight:500; margin-right:.5rem;
+  white-space: nowrap;
 }
 #chatInputContainer {
   display:flex; padding:.75rem;
