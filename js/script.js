@@ -150,8 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     ping();
     player.pause();
-    playOverlay.classList.remove('hidden');
-
+    if (playOverlay) {
+      playOverlay.classList.remove('hidden');
+    }
     player.addEventListener('canplay', () => {
       new Plyr(player);
       window.addEventListener('keydown', e => {
