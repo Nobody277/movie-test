@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let supSeek = false, supPlay = false, supPause = false;
 
   const player = document.getElementById('videoPlayer');
-  const playOverlay = document.getElementById('playOverlay');
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
@@ -134,33 +133,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const og = document.querySelector('meta[property="og:title"]');
       if (og) og.setAttribute('content', full);
     }
-    console.log('videoUrl: ', state.videoUrl);
+
     initState = state;
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-
       if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
+        hls.loadSource(currentSrc);
         hls.attachMedia(player);
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('[HLS] media attached, loading source:', currentSrc);
-          hls.loadSource(currentSrc);
-        });
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('[HLS] manifest parsed successfully');
-        });
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('[HLS] error:', data);
-        });
       } else {
         player.src = currentSrc;
       }
     }
     ping();
     player.pause();
-    playOverlay.classList.remove('hidden');
-
     player.addEventListener('canplay', () => {
       new Plyr(player);
       window.addEventListener('keydown', e => {
@@ -180,14 +167,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       supSeek = true;
       player.currentTime = target;
-      supPause = initState.paused;
-      player.pause();
-
-      playOverlay.addEventListener('click', () => {
+      if (initState.paused) {
+        supPause = true;
+        player.pause();
+      } else {
         supPlay = true;
         player.play();
-        playOverlay.classList.add('hidden');
-      }, { once: true });
+      }
 
       setupSync();
       startSync();

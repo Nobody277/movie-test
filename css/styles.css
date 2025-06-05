@@ -179,26 +179,3 @@ button {
     padding: 0.5rem;
   }
 }
-
-#playOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
-#playOverlay.hidden {
-  display: none;
-}
-.overlay-button {
-  font-size: 4rem;
-  color: var(--accent);
-  text-shadow: 0 0 10px rgba(0,0,0,0.5);
-}
