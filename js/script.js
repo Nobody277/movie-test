@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.videoUrl !== currentSrc) {
       currentSrc = state.videoUrl;
       if (hls) { hls.destroy(); hls = null; }
-      if (currentSrc.endsWith('.m3u8') && Hls.isSupported()) {
+      if (currentSrc.includes('.m3u8') && Hls.isSupported()) {
         hls = new Hls();
         hls.loadSource(currentSrc);
         hls.attachMedia(player);
