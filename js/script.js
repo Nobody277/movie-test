@@ -17,10 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   const volumeBoostBtn = document.getElementById('volumeBoostBtn');
-  const volumeBoostSlider = document.getElementById('volumeBoostSlider');
   const volumeBoostRange = document.getElementById('volumeBoostRange');
   const volumeBoostValue = document.getElementById('volumeBoostValue');
-  let originalVolume = 1;
+  const volumeBoostSlider = document.getElementById('volumeBoostSlider');
+  
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioContext.createMediaElementSource(player);
+  const gainNode = audioContext.createGain();
+  source.connect(gainNode);
+  gainNode.connect(audioContext.destination);
 
   volumeBoostBtn.addEventListener('click', () => {
     volumeBoostSlider.classList.toggle('hidden');
@@ -29,13 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   volumeBoostRange.addEventListener('input', (e) => {
     const boostValue = parseFloat(e.target.value);
     volumeBoostValue.textContent = `${boostValue.toFixed(1)}x`;
-    if (player) {
-      player.volume = originalVolume * boostValue;
-    }
-  });
-
-  player.addEventListener('loadedmetadata', () => {
-    originalVolume = player.volume;
+    gainNode.gain.value = boostValue;
   });
 
   document.addEventListener('click', (e) => {
