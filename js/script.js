@@ -180,7 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
     ping();
     player.pause();
     player.addEventListener('canplay', () => {
-      new Plyr(player);
+      new Plyr(player, {
+        fullscreen: {
+          iosNative: true
+        }
+      });
       window.addEventListener('keydown', e => {
         if (document.activeElement.tagName === 'INPUT') return;
         if (e.key === 'ArrowRight') {
