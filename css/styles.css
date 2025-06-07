@@ -219,7 +219,7 @@ button {
 
 #volumeBoostBtn {
   background: rgba(0, 0, 0, 0.7);
-  border: 1px solid var(--in-border);
+  border: 1px solid var(--accent);
   border-radius: 50%;
   width: 40px;
   height: 40px;
@@ -235,10 +235,16 @@ button {
   transform: scale(1.05);
 }
 
+#volumeBoostBtn i {
+  font-size: 1.2rem;
+  color: var(--accent);
+}
+
 #volumeBoostBtn svg {
   width: 24px;
   height: 24px;
-  color: var(--fg);
+  color: #ffffff;
+  filter: drop-shadow(0 0 2px var(--accent));
 }
 
 #volumeBoostSlider {

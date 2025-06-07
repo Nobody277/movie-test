@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveUsernameBtn = document.getElementById('saveUsername');
   
   const player = document.getElementById('videoPlayer');
+  const boostAudio = document.getElementById('volumeBoostAudio');
   player.addEventListener('error', (e) => {
     console.error('[Video element error]', player.error);
   });
@@ -21,11 +22,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const volumeBoostValue = document.getElementById('volumeBoostValue');
   const volumeBoostSlider = document.getElementById('volumeBoostSlider');
   
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaElementSource(player);
-  const gainNode = audioContext.createGain();
-  source.connect(gainNode);
-  gainNode.connect(audioContext.destination);
+  let originalVolume = 1;
+  let isBoosted = false;
+
+  function setupVolumeBoost() {
+    if (player.src) {
+      boostAudio.src = player.src;
+      boostAudio.volume = 0;
+      boostAudio.play();
+    }
+  }
+
+  player.addEventListener('loadedmetadata', () => {
+    originalVolume = player.volume;
+    setupVolumeBoost();
+  });
+
+  player.addEventListener('play', () => {
+    if (isBoosted) {
+      boostAudio.play();
+    }
+  });
+
+  player.addEventListener('pause', () => {
+    boostAudio.pause();
+  });
+
+  player.addEventListener('seeking', () => {
+    if (isBoosted) {
+      boostAudio.currentTime = player.currentTime;
+    }
+  });
 
   volumeBoostBtn.addEventListener('click', () => {
     volumeBoostSlider.classList.toggle('hidden');
@@ -34,7 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
   volumeBoostRange.addEventListener('input', (e) => {
     const boostValue = parseFloat(e.target.value);
     volumeBoostValue.textContent = `${boostValue.toFixed(1)}x`;
-    gainNode.gain.value = boostValue;
+    
+    if (boostValue > 1) {
+      if (!isBoosted) {
+        isBoosted = true;
+        setupVolumeBoost();
+      }
+      boostAudio.volume = (boostValue - 1) * originalVolume;
+      player.volume = 0;
+    } else {
+      isBoosted = false;
+      boostAudio.volume = 0;
+      player.volume = originalVolume;
+    }
   });
 
   document.addEventListener('click', (e) => {
