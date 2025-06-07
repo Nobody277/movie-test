@@ -25,9 +25,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let originalVolume = 1;
   let isBoosted = false;
 
+  function cleanupVolumeBoost() {
+    if (isBoosted) {
+      boostAudio.pause();
+      boostAudio.src = '';
+      isBoosted = false;
+    }
+  }
+
   function setupVolumeBoost() {
     if (player.src) {
+      cleanupVolumeBoost();
       boostAudio.src = player.src;
+      boostAudio.currentTime = player.currentTime;
       boostAudio.volume = 0;
       boostAudio.play();
     }
@@ -38,9 +48,21 @@ document.addEventListener('DOMContentLoaded', () => {
     setupVolumeBoost();
   });
 
+  const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+  Object.defineProperty(player, 'src', {
+    get: function() {
+      return originalSrcDescriptor.get.call(this);
+    },
+    set: function(value) {
+      cleanupVolumeBoost();
+      originalSrcDescriptor.set.call(this, value);
+    }
+  });
+
   player.addEventListener('play', () => {
     if (isBoosted) {
-      boostAudio.play();
+      boostAudio.currentTime = player.currentTime;
+      boostAudio.play().catch(e => console.warn('Audio play failed:', e));
     }
   });
 
@@ -51,6 +73,21 @@ document.addEventListener('DOMContentLoaded', () => {
   player.addEventListener('seeking', () => {
     if (isBoosted) {
       boostAudio.currentTime = player.currentTime;
+    }
+  });
+
+  player.addEventListener('timeupdate', () => {
+    if (isBoosted && Math.abs(boostAudio.currentTime - player.currentTime) > 0.5) {
+      boostAudio.currentTime = player.currentTime;
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      boostAudio.pause();
+    } else if (isBoosted && !player.paused) {
+      boostAudio.currentTime = player.currentTime;
+      boostAudio.play().catch(e => console.warn('Audio play failed:', e));
     }
   });
 
@@ -67,8 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isBoosted = true;
         setupVolumeBoost();
       }
-      boostAudio.volume = (boostValue - 1) * originalVolume;
-      player.volume = 0;
+      const extraVolume = Math.min(1, (boostValue - 1));
+      boostAudio.volume = extraVolume;
+      player.volume = originalVolume * (1 - extraVolume);
     } else {
       isBoosted = false;
       boostAudio.volume = 0;
@@ -366,4 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Clean up when leaving the page
+  window.addEventListener('beforeunload', cleanupVolumeBoost);
 });
