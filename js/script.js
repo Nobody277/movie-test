@@ -11,115 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const usernameInput = document.getElementById('usernameInput');
   const saveUsernameBtn = document.getElementById('saveUsername');
   
-  const player = document.getElementById('videoPlayer');
-  const boostAudio = document.getElementById('volumeBoostAudio');
-  player.addEventListener('error', (e) => {
-    console.error('[Video element error]', player.error);
-  });
-
-  const volumeBoostBtn = document.getElementById('volumeBoostBtn');
-  const volumeBoostRange = document.getElementById('volumeBoostRange');
-  const volumeBoostValue = document.getElementById('volumeBoostValue');
-  const volumeBoostSlider = document.getElementById('volumeBoostSlider');
-  
-  let originalVolume = 1;
-  let isBoosted = false;
-
-  function cleanupVolumeBoost() {
-    if (isBoosted) {
-      boostAudio.pause();
-      boostAudio.src = '';
-      isBoosted = false;
-    }
-  }
-
-  function setupVolumeBoost() {
-    if (player.src) {
-      cleanupVolumeBoost();
-      boostAudio.src = player.src;
-      boostAudio.currentTime = player.currentTime;
-      boostAudio.volume = 0;
-      boostAudio.play();
-    }
-  }
-
-  player.addEventListener('loadedmetadata', () => {
-    originalVolume = player.volume;
-    setupVolumeBoost();
-  });
-
-  const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-  Object.defineProperty(player, 'src', {
-    get: function() {
-      return originalSrcDescriptor.get.call(this);
-    },
-    set: function(value) {
-      cleanupVolumeBoost();
-      originalSrcDescriptor.set.call(this, value);
-    }
-  });
-
-  player.addEventListener('play', () => {
-    if (isBoosted) {
-      boostAudio.currentTime = player.currentTime;
-      boostAudio.play().catch(e => console.warn('Audio play failed:', e));
-    }
-  });
-
-  player.addEventListener('pause', () => {
-    boostAudio.pause();
-  });
-
-  player.addEventListener('seeking', () => {
-    if (isBoosted) {
-      boostAudio.currentTime = player.currentTime;
-    }
-  });
-
-  player.addEventListener('timeupdate', () => {
-    if (isBoosted && Math.abs(boostAudio.currentTime - player.currentTime) > 0.5) {
-      boostAudio.currentTime = player.currentTime;
-    }
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      boostAudio.pause();
-    } else if (isBoosted && !player.paused) {
-      boostAudio.currentTime = player.currentTime;
-      boostAudio.play().catch(e => console.warn('Audio play failed:', e));
-    }
-  });
-
-  volumeBoostBtn.addEventListener('click', () => {
-    volumeBoostSlider.classList.toggle('hidden');
-  });
-
-  volumeBoostRange.addEventListener('input', (e) => {
-    const boostValue = parseFloat(e.target.value);
-    volumeBoostValue.textContent = `${boostValue.toFixed(1)}x`;
-    
-    if (boostValue > 1) {
-      if (!isBoosted) {
-        isBoosted = true;
-        setupVolumeBoost();
-      }
-      const extraVolume = Math.min(1, (boostValue - 1));
-      boostAudio.volume = extraVolume;
-      player.volume = originalVolume * (1 - extraVolume);
-    } else {
-      isBoosted = false;
-      boostAudio.volume = 0;
-      player.volume = originalVolume;
-    }
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!volumeBoostBtn.contains(e.target) && !volumeBoostSlider.contains(e.target)) {
-      volumeBoostSlider.classList.add('hidden');
-    }
-  });
-
   socket.on('disconnect', (reason) => {
       console.warn('[Socket disconnected]', reason);
     });
@@ -176,6 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
 
+  const player = document.getElementById('videoPlayer');
+  player.addEventListener('error', (e) => {
+    console.error('[Video element error]', player.error);
+  });
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
@@ -404,7 +299,4 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
-  // Clean up when leaving the page
-  window.addEventListener('beforeunload', cleanupVolumeBoost);
 });
