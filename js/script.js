@@ -11,6 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const usernameInput = document.getElementById('usernameInput');
   const saveUsernameBtn = document.getElementById('saveUsername');
   
+  const player = document.getElementById('videoPlayer');
+  player.addEventListener('error', (e) => {
+    console.error('[Video element error]', player.error);
+  });
+
   const volumeBoostBtn = document.getElementById('volumeBoostBtn');
   const volumeBoostSlider = document.getElementById('volumeBoostSlider');
   const volumeBoostRange = document.getElementById('volumeBoostRange');
@@ -95,10 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let hls, currentSrc = '', latency = 0, initState = null;
   let supSeek = false, supPlay = false, supPause = false;
 
-  const player = document.getElementById('videoPlayer');
-  player.addEventListener('error', (e) => {
-    console.error('[Video element error]', player.error);
-  });
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
