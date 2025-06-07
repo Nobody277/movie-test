@@ -11,6 +11,34 @@ document.addEventListener('DOMContentLoaded', () => {
   const usernameInput = document.getElementById('usernameInput');
   const saveUsernameBtn = document.getElementById('saveUsername');
   
+  const volumeBoostBtn = document.getElementById('volumeBoostBtn');
+  const volumeBoostSlider = document.getElementById('volumeBoostSlider');
+  const volumeBoostRange = document.getElementById('volumeBoostRange');
+  const volumeBoostValue = document.getElementById('volumeBoostValue');
+  let originalVolume = 1;
+
+  volumeBoostBtn.addEventListener('click', () => {
+    volumeBoostSlider.classList.toggle('hidden');
+  });
+
+  volumeBoostRange.addEventListener('input', (e) => {
+    const boostValue = parseFloat(e.target.value);
+    volumeBoostValue.textContent = `${boostValue.toFixed(1)}x`;
+    if (player) {
+      player.volume = originalVolume * boostValue;
+    }
+  });
+
+  player.addEventListener('loadedmetadata', () => {
+    originalVolume = player.volume;
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!volumeBoostBtn.contains(e.target) && !volumeBoostSlider.contains(e.target)) {
+      volumeBoostSlider.classList.add('hidden');
+    }
+  });
+
   socket.on('disconnect', (reason) => {
       console.warn('[Socket disconnected]', reason);
     });
