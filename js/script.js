@@ -1,6 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   const SOCKET_SERVER_URL = 'https://movie-night-backend-dvp8.onrender.com';
-  const socket = io(SOCKET_SERVER_URL);
+  const socket = io(SOCKET_SERVER_URL, {
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
   const isMobile = /Mobi|Android|iPhone/.test(navigator.userAgent);
 
   const savedUsername = localStorage.getItem('movieNightUsername');
@@ -12,14 +17,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveUsernameBtn = document.getElementById('saveUsername');
   
   socket.on('disconnect', (reason) => {
-      console.warn('[Socket disconnected]', reason);
+      console.warn(`[Socket disconnected] Reason: ${reason}. Attempting to reconnect...`);
     });
     socket.on('reconnect', (attemptNumber) => {
-      console.log('[Socket reconnected] attempt', attemptNumber);
-      socket.emit('joinRoom', { roomId, username });
+      console.log(`[Socket reconnected] after ${attemptNumber} attempts.`);
+      if (roomId) {
+        socket.emit('joinRoom', { roomId, username });
+      }
     });
     socket.on('connect_error', (err) => {
-      console.error('[Socket connect_error]', err);
+      console.error(`[Socket connect_error] ${err.message}`);
     });
 
   usernameDisplay.textContent = username;
@@ -70,6 +77,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const player = document.getElementById('videoPlayer');
   player.addEventListener('error', (e) => {
     console.error('[Video element error]', player.error);
+    console.warn('Video error detected. Attempting to recover and re-sync...');
+    if (hls && hls.media) {
+      hls.recoverMediaError();
+      return;
+    }
+    const paused = player.paused;
+    const currentTime = player.currentTime;
+    player.load();
+    player.addEventListener('canplay', () => {
+      player.currentTime = currentTime;
+      if (!paused) {
+        player.play();
+      }
+    }, { once: true });
+    if (socket.connected) {
+      socket.emit('getState', { roomId });
+    }
   });
   const statsList = document.getElementById('statsList');
   const chatMsgs = document.getElementById('chatMessages');
@@ -109,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function fmtTime(s) {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
-    const sec = Math.round(s % 60).toString().padStart(2, '0');
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
     const min = m.toString().padStart(2, '0');
     return `${h}:${min}:${sec}`;
   }
